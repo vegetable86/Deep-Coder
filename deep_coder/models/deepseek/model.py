@@ -1,3 +1,5 @@
+import json
+
 from openai import OpenAI
 
 from deep_coder.models.base import ModelBase
@@ -22,13 +24,20 @@ class DeepSeekModel(ModelBase):
                     {
                         "id": call.id,
                         "name": call.function.name,
-                        "arguments": call.function.arguments,
+                        "arguments": _normalize_tool_arguments(call.function.arguments),
                     }
                 )
+        usage_raw = response.usage.model_dump() if response.usage else {}
         return {
             "content": message.content,
             "tool_calls": tool_calls,
-            "usage": response.usage.model_dump() if response.usage else None,
+            "usage": {
+                "prompt_tokens": usage_raw.get("prompt_tokens", 0),
+                "completion_tokens": usage_raw.get("completion_tokens", 0),
+                "total_tokens": usage_raw.get("total_tokens", 0),
+                "cache_hit_tokens": usage_raw.get("prompt_cache_hit_tokens", 0),
+                "cache_miss_tokens": usage_raw.get("prompt_cache_miss_tokens", 0),
+            },
             "finish_reason": response.choices[0].finish_reason,
             "raw_response": response,
         }
@@ -40,3 +49,8 @@ class DeepSeekModel(ModelBase):
             "transport": "openai-compatible-sdk",
         }
 
+
+def _normalize_tool_arguments(arguments):
+    if isinstance(arguments, str):
+        return json.loads(arguments or "{}")
+    return arguments or {}

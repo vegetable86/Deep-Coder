@@ -13,14 +13,18 @@ class RuntimeConfig:
     state_dir: Path
 
     @classmethod
-    def from_env(cls, workdir: Path | None = None):
+    def from_env(
+        cls,
+        workdir: Path | None = None,
+        state_dir: Path | None = None,
+    ):
         workdir = workdir or Path.cwd()
+        state_dir = state_dir or (Path.home() / ".deepcode")
         return cls(
             model_provider="deepseek",
             model_name="deepseek-chat",
             api_key=os.environ["DEEPSEEK_API_KEY"],
             base_url="https://api.deepseek.com",
             workdir=workdir,
-            state_dir=Path.home() / ".deepcode",
+            state_dir=state_dir,
         )
-

@@ -3,11 +3,13 @@ from deep_coder.context.strategies.base import ContextStrategyBase
 
 class SimpleHistoryContextStrategy(ContextStrategyBase):
     def prepare_messages(self, session, system_prompt: str, user_input: str) -> list[dict]:
-        return [
+        messages = [
             {"role": "system", "content": system_prompt},
             *session.messages,
-            {"role": "user", "content": user_input},
         ]
+        if user_input is not None:
+            messages.append({"role": "user", "content": user_input})
+        return messages
 
     def record_event(self, session, event: dict) -> None:
         session.append(event)

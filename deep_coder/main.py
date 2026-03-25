@@ -6,6 +6,7 @@ from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
 from deep_coder.context.strategies.simple_history.strategy import (
     SimpleHistoryContextStrategy,
 )
+from deep_coder.harness.deepcoder.harness import DeepCoderHarness
 from deep_coder.models.deepseek.model import DeepSeekModel
 from deep_coder.prompts.deepcoder.prompt import DeepCoderPrompt
 from deep_coder.tools.registry import ToolRegistry
@@ -23,12 +24,20 @@ def build_runtime(
         store=FileSystemSessionStore(root=config.state_dir),
         strategy=SimpleHistoryContextStrategy(),
     )
+    harness = DeepCoderHarness(
+        config=config,
+        model=model,
+        prompt=prompt,
+        context=context,
+        tools=tools,
+    )
     return {
         "config": config,
         "model": model,
         "tools": tools,
         "prompt": prompt,
         "context": context,
+        "harness": harness,
     }
 
 

@@ -35,6 +35,65 @@ class FakeContext:
         return self._sessions[session_id]
 
 
+class FakeHarness:
+    def __init__(self, context: FakeContext):
+        self.context = context
+
+    def run(self, session_locator, user_input: str, event_sink=None):
+        session = self.context.open(locator=session_locator)
+        turn_id = "turn-live"
+        events = [
+            {
+                "type": "turn_started",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+            },
+            {
+                "type": "message_committed",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+                "role": "user",
+                "text": user_input,
+            },
+            {
+                "type": "tool_called",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+                "name": "bash",
+                "display_command": "bash: mkdir aa",
+                "arguments": {"command": "mkdir aa"},
+            },
+            {
+                "type": "usage_reported",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "cache_hit_tokens": 3,
+                "cache_miss_tokens": 7,
+            },
+            {
+                "type": "message_committed",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+                "role": "assistant",
+                "text": "done",
+            },
+            {
+                "type": "turn_finished",
+                "session_id": session.session_id,
+                "turn_id": turn_id,
+                "finish_reason": "stop",
+            },
+        ]
+        session.events.extend(events)
+        for event in events:
+            if event_sink is not None:
+                event_sink.emit(event)
+        return SimpleNamespace(session_id=session.session_id, final_text="done")
+
+
 @pytest.fixture
 def fake_project(tmp_path: Path) -> ProjectRecord:
     workspace = tmp_path / "repo"
@@ -88,4 +147,5 @@ def fake_runtime(fake_project: ProjectRecord):
     return {
         "config": SimpleNamespace(model_name="deepseek-chat"),
         "context": context,
+        "harness": FakeHarness(context),
     }

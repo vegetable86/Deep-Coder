@@ -8,6 +8,7 @@ import time
 import uuid
 import threading
 
+# Legacy prototype loop; package runtime is introduced under `deep_coder/`.
 client = OpenAI(
     api_key=os.environ.get('DEEPSEEK_API_KEY'),
     base_url="https://api.deepseek.com"

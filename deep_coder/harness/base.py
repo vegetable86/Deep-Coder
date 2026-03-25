@@ -7,6 +7,5 @@ class HarnessBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def run(self, session_locator, user_input: str):
+    def run(self, session_locator, user_input: str, event_sink=None):
         raise NotImplementedError
-

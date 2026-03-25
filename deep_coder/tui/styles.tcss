@@ -1,0 +1,28 @@
+Screen {
+    layout: vertical;
+}
+
+#timeline-scroll {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#timeline {
+    width: 100%;
+    padding: 1 2;
+}
+
+#bottom-pane {
+    height: 8;
+    layout: vertical;
+    border-top: solid $primary;
+}
+
+#status-strip {
+    height: 1;
+    padding: 0 1;
+}
+
+#composer {
+    height: 1fr;
+}

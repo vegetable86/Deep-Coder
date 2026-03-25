@@ -7,8 +7,15 @@ from deep_coder.context.stores.base import SessionStoreBase
 
 
 class FileSystemSessionStore(SessionStoreBase):
-    def __init__(self, root: Path):
+    def __init__(
+        self,
+        root: Path,
+        project_key: str | None = None,
+        workspace_path: Path | None = None,
+    ):
         self.root = Path(root)
+        self.project_key = project_key
+        self.workspace_path = str(workspace_path.resolve()) if workspace_path else None
         self.sessions_dir = self.root / "sessions"
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
 
@@ -25,12 +32,18 @@ class FileSystemSessionStore(SessionStoreBase):
         session_dir = self.sessions_dir / session_id
         meta_path = session_dir / "meta.json"
         messages_path = session_dir / "messages.jsonl"
+        events_path = session_dir / "events.jsonl"
         strategy_name = "simple_history"
         strategy_state = {}
         messages = []
+        events = []
+        project_key = self.project_key
+        workspace_path = self.workspace_path
 
         if meta_path.exists():
-            json.loads(meta_path.read_text())
+            meta = json.loads(meta_path.read_text())
+            project_key = meta.get("project_key")
+            workspace_path = meta.get("workspace_path")
 
         context_root = session_dir / "context"
         if context_root.exists():
@@ -44,6 +57,12 @@ class FileSystemSessionStore(SessionStoreBase):
                 for line in messages_path.read_text().splitlines()
                 if line.strip()
             ]
+        if events_path.exists():
+            events = [
+                json.loads(line)
+                for line in events_path.read_text().splitlines()
+                if line.strip()
+            ]
 
         state_path = session_dir / "context" / strategy_name / "state.json"
         if state_path.exists():
@@ -53,6 +72,9 @@ class FileSystemSessionStore(SessionStoreBase):
             session_id=session_id,
             root=session_dir,
             messages=messages,
+            events=events,
+            project_key=project_key,
+            workspace_path=workspace_path,
             strategy_name=strategy_name,
             strategy_state=strategy_state,
         )
@@ -66,6 +88,9 @@ class FileSystemSessionStore(SessionStoreBase):
         (session_dir / "meta.json").write_text(json.dumps(session.meta(), indent=2))
         (session_dir / "messages.jsonl").write_text(
             "".join(json.dumps(message) + "\n" for message in session.messages)
+        )
+        (session_dir / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in session.events)
         )
         (context_dir / "state.json").write_text(
             json.dumps(session.strategy_state, indent=2)

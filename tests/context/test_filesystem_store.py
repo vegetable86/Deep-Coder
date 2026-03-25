@@ -38,3 +38,23 @@ def test_filesystem_store_persists_messages_and_strategy_state(tmp_path):
     assert reopened.strategy_name == "simple_history"
     assert reopened.strategy_state == {"message_count": 1}
     assert json.loads(state_path.read_text()) == {"message_count": 1}
+
+
+def test_filesystem_store_persists_events_and_project_meta(tmp_path):
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    store = FileSystemSessionStore(
+        root=tmp_path,
+        project_key="repo-abc123",
+        workspace_path=workspace,
+    )
+
+    session = store.open()
+    session.events.append({"type": "turn_started", "turn_id": "t1"})
+    store.save(session)
+
+    reopened = store.open(locator={"id": session.session_id})
+
+    assert reopened.events == [{"type": "turn_started", "turn_id": "t1"}]
+    assert reopened.meta()["project_key"] == "repo-abc123"
+    assert reopened.meta()["workspace_path"] == str(workspace)

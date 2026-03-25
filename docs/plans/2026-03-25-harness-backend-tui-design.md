@@ -229,6 +229,7 @@ Recommended runtime layout:
         <session-id>/
           meta.json
           messages.jsonl
+          events.jsonl
           context/
             simple_history/
               state.json
@@ -255,6 +256,18 @@ Session metadata should include at least:
   "workspace_path": "/home/wys/Deep-Coder"
 }
 ```
+
+`messages.jsonl` remains the source of truth for model context replay.
+
+`events.jsonl` stores the persisted timeline stream for the TUI, including:
+
+- tool call presentation
+- tool output
+- edit diffs
+- usage blocks
+- error events
+
+Without a persisted event log, reopened sessions would lose the structured runtime history required by the session-first TUI.
 
 ## Error Handling
 

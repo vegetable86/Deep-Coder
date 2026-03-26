@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from rich.console import Console
+from textual.content import Content
 from textual.visual import RichVisual
 
 from deep_coder.projects.registry import ProjectRecord
@@ -149,6 +150,8 @@ class FakeModel:
 def render_plain_text(renderable, width: int = 120) -> str:
     if isinstance(renderable, RichVisual):
         renderable = renderable._renderable
+    if isinstance(renderable, Content):
+        return renderable.plain.rstrip("\n")
     capture = StringIO()
     console = Console(
         file=capture,

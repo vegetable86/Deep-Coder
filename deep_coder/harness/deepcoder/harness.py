@@ -77,7 +77,11 @@ class DeepCoderHarness(HarnessBase):
                     },
                 )
                 for tool_call in response["tool_calls"]:
-                    output = self.tools.execute(tool_call["name"], tool_call["arguments"])
+                    output = self.tools.execute(
+                        tool_call["name"],
+                        tool_call["arguments"],
+                        session=session,
+                    )
                     tool_results.append(output)
                     self._publish(
                         session,
@@ -125,6 +129,17 @@ class DeepCoderHarness(HarnessBase):
                                 name=tool_call["name"],
                                 path=tool_call["arguments"].get("path"),
                                 diff_text=output.diff_text,
+                            ),
+                        )
+                    for extra_event in output.timeline_events:
+                        self._publish(
+                            session,
+                            event_sink,
+                            self._event(
+                                session,
+                                turn_id,
+                                extra_event["type"],
+                                **extra_event["payload"],
                             ),
                         )
                 self.context.flush(session)

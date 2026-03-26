@@ -127,6 +127,36 @@ def test_live_markdown_events_render_without_raw_fences(fake_runtime, fake_proje
     asyncio.run(run())
 
 
+def test_live_task_snapshot_event_renders_inline_in_timeline(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "task_snapshot",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "tasks": [
+                        {
+                            "id": 1,
+                            "subject": "inspect repo",
+                            "status": "in_progress",
+                            "blocked_by": [],
+                            "blocks": [],
+                        }
+                    ],
+                    "completed_count": 0,
+                    "total_count": 1,
+                }
+            )
+            await asyncio.sleep(0)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "[>] #1: inspect repo" in timeline_text
+
+    asyncio.run(run())
+
+
 def test_timeline_arrow_keys_scroll_multiple_lines_when_focused(fake_runtime, fake_project):
     async def run():
         session = fake_runtime["context"].open({"id": "session-a"})

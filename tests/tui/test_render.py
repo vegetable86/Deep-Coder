@@ -1,6 +1,7 @@
 from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
+    render_task_snapshot_block,
     render_tool_output,
     render_usage_block,
 )
@@ -70,3 +71,33 @@ def test_usage_block_renders_on_one_line():
     )
 
     assert block.plain == "prompt 10 | usage 15 | hit 3 | miss 7"
+
+
+def test_render_task_snapshot_block_shows_status_markers_and_progress():
+    block = render_task_snapshot_block(
+        {
+            "tasks": [
+                {
+                    "id": 1,
+                    "subject": "inspect repo",
+                    "status": "completed",
+                    "blocked_by": [],
+                    "blocks": [2],
+                },
+                {
+                    "id": 2,
+                    "subject": "edit app",
+                    "status": "pending",
+                    "blocked_by": [1],
+                    "blocks": [],
+                },
+            ],
+            "completed_count": 1,
+            "total_count": 2,
+        }
+    )
+
+    text = render_plain_text(block)
+    assert "[x] #1: inspect repo" in text
+    assert "[ ] #2: edit app" in text
+    assert "(1/2 completed)" in text

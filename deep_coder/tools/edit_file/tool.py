@@ -9,7 +9,7 @@ class EditFileTool(ToolBase):
         self.config = config
         self.workdir = Path(workdir)
 
-    def exec(self, arguments: dict) -> str:
+    def exec(self, arguments: dict, session=None) -> str:
         path = _safe_path(self.workdir, arguments["path"])
         old_text = arguments["old_text"]
         new_text = arguments["new_text"]

@@ -15,7 +15,7 @@ class ReadFileTool(ToolBase):
         self.config = config
         self.workdir = Path(workdir)
 
-    def exec(self, arguments: dict) -> str:
+    def exec(self, arguments: dict, session=None) -> str:
         limit = arguments.get("limit")
         text = _safe_path(self.workdir, arguments["path"]).read_text()
         lines = text.splitlines()

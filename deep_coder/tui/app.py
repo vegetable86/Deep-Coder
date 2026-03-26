@@ -13,6 +13,7 @@ from deep_coder.tui.commands.parser import parse_command_text
 from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
+    render_task_snapshot_block,
     render_tool_call_block,
     render_tool_output,
     render_usage_block,
@@ -357,6 +358,8 @@ class DeepCodeApp(App):
             block = render_diff_block(event.get("path") or event["name"], event["diff_text"])
         elif event_type == "usage_reported":
             block = render_usage_block(event)
+        elif event_type == "task_snapshot":
+            block = render_task_snapshot_block(event)
         else:
             return
         self._timeline_blocks.append(block)

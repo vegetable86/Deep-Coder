@@ -37,7 +37,13 @@ def test_filesystem_store_persists_messages_and_strategy_state(tmp_path):
     assert reopened.messages == [{"role": "user", "content": "hello"}]
     assert reopened.strategy_name == "simple_history"
     assert reopened.strategy_state == {"message_count": 1}
-    assert json.loads(state_path.read_text()) == {"message_count": 1}
+    assert json.loads(state_path.read_text()) == {
+        "message_count": 1,
+        "task_system": {
+            "next_task_id": 1,
+            "tasks": [],
+        },
+    }
 
 
 def test_filesystem_store_persists_events_and_project_meta(tmp_path):
@@ -104,3 +110,33 @@ def test_filesystem_store_backfills_preview_for_existing_session_metadata(tmp_pa
             "preview": "show me the first prompt in history",
         }
     ]
+
+
+def test_filesystem_store_persists_task_state(tmp_path):
+    store = FileSystemSessionStore(root=tmp_path)
+    session = store.open()
+    session.next_task_id = 3
+    session.tasks = [
+        {
+            "id": 1,
+            "subject": "inspect repo",
+            "description": "",
+            "status": "completed",
+            "blocked_by": [],
+            "blocks": [2],
+        },
+        {
+            "id": 2,
+            "subject": "edit app",
+            "description": "",
+            "status": "pending",
+            "blocked_by": [],
+            "blocks": [],
+        },
+    ]
+
+    store.save(session)
+    reopened = store.open(locator={"id": session.session_id})
+
+    assert reopened.next_task_id == 3
+    assert reopened.tasks[1]["subject"] == "edit app"

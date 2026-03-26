@@ -53,7 +53,7 @@ def test_harness_executes_tool_calls_until_final_answer(tmp_path):
         def schemas(self):
             return [{"function": {"name": "read_file"}}]
 
-        def execute(self, name, arguments):
+        def execute(self, name, arguments, session=None):
             assert name == "read_file"
             assert arguments == {"path": "README.md"}
             return ToolExecutionResult(
@@ -156,7 +156,7 @@ def test_harness_emits_and_persists_timeline_events(tmp_path):
         def schemas(self):
             return [{"function": {"name": "edit_file"}}]
 
-        def execute(self, name, arguments):
+        def execute(self, name, arguments, session=None):
             return ToolExecutionResult(
                 name=name,
                 display_command="edit_file notes.txt",
@@ -195,3 +195,97 @@ def test_harness_emits_and_persists_timeline_events(tmp_path):
         "turn_finished",
     ]
     assert reopened.events == events
+
+
+def test_harness_passes_active_session_to_tools_and_emits_task_snapshot(tmp_path):
+    events = []
+
+    class CapturingSink:
+        def emit(self, event):
+            events.append(event)
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "task_list",
+                            "arguments": {},
+                        }
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return [{"function": {"name": "task_list"}}]
+
+        def execute(self, name, arguments, session=None):
+            assert session is not None
+            return ToolExecutionResult(
+                name=name,
+                display_command="task_list",
+                model_output="(0/1 completed)",
+                output_text="(0/1 completed)",
+                timeline_events=[
+                    {
+                        "type": "task_snapshot",
+                        "payload": {
+                            "tasks": [
+                                {
+                                    "id": 1,
+                                    "subject": "inspect repo",
+                                    "status": "pending",
+                                    "blocked_by": [],
+                                    "blocks": [],
+                                }
+                            ],
+                            "completed_count": 0,
+                            "total_count": 1,
+                        },
+                    }
+                ],
+            )
+
+    prompt = DeepCoderPrompt(
+        config=SimpleNamespace(workdir=tmp_path),
+    )
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    harness.run(None, "show tasks", event_sink=CapturingSink())
+
+    assert [event["type"] for event in events] == [
+        "turn_started",
+        "message_committed",
+        "tool_called",
+        "tool_output",
+        "task_snapshot",
+        "message_committed",
+        "turn_finished",
+    ]

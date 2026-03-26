@@ -7,10 +7,9 @@ class ToolBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def exec(self, arguments: dict) -> str:
+    def exec(self, arguments: dict, session=None):
         raise NotImplementedError
 
     @abstractmethod
     def schema(self) -> dict:
         raise NotImplementedError
-

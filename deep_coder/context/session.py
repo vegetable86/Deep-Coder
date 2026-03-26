@@ -21,6 +21,8 @@ class Session:
     root: Path
     messages: list[dict] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)
+    next_task_id: int = 1
+    tasks: list[dict] = field(default_factory=list)
     project_key: str | None = None
     workspace_path: str | None = None
     strategy_name: str = "simple_history"

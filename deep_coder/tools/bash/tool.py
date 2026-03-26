@@ -8,7 +8,7 @@ class BashTool(ToolBase):
         self.config = config
         self.workdir = workdir
 
-    def exec(self, arguments: dict) -> str:
+    def exec(self, arguments: dict, session=None) -> str:
         command = arguments["command"]
         dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
         if any(item in command for item in dangerous):

@@ -10,7 +10,16 @@ def test_registry_returns_builtin_tool_schemas(tmp_path, monkeypatch):
 
     names = [schema["function"]["name"] for schema in registry.schemas()]
 
-    assert names == ["bash", "read_file", "write_file", "edit_file"]
+    assert names == [
+        "bash",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "task_create",
+        "task_update",
+        "task_list",
+        "task_get",
+    ]
 
 
 def test_registry_returns_display_command_and_diff_for_edit(tmp_path, monkeypatch):

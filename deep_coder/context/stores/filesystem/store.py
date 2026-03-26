@@ -72,12 +72,15 @@ class FileSystemSessionStore(SessionStoreBase):
         state_path = session_dir / "context" / strategy_name / "state.json"
         if state_path.exists():
             strategy_state = json.loads(state_path.read_text())
+        task_state = strategy_state.pop("task_system", {})
 
         return Session(
             session_id=session_id,
             root=session_dir,
             messages=messages,
             events=events,
+            next_task_id=task_state.get("next_task_id", 1),
+            tasks=task_state.get("tasks", []),
             project_key=project_key,
             workspace_path=workspace_path,
             strategy_name=strategy_name,
@@ -97,9 +100,12 @@ class FileSystemSessionStore(SessionStoreBase):
         (session_dir / "events.jsonl").write_text(
             "".join(json.dumps(event) + "\n" for event in session.events)
         )
-        (context_dir / "state.json").write_text(
-            json.dumps(session.strategy_state, indent=2)
-        )
+        state = dict(session.strategy_state)
+        state["task_system"] = {
+            "next_task_id": session.next_task_id,
+            "tasks": session.tasks,
+        }
+        (context_dir / "state.json").write_text(json.dumps(state, indent=2))
 
     @staticmethod
     def _load_preview(messages_path: Path) -> str | None:

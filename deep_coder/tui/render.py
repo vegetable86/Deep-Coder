@@ -41,6 +41,25 @@ def render_usage_block(usage: dict) -> Text:
     )
 
 
+def render_task_snapshot_block(event: dict) -> RenderableType:
+    marker_by_status = {
+        "pending": "[ ]",
+        "in_progress": "[>]",
+        "completed": "[x]",
+    }
+    lines = []
+    for task in event["tasks"]:
+        marker = marker_by_status.get(task["status"], "[?]")
+        lines.append(f"{marker} #{task['id']}: {task['subject']}")
+    lines.append(f"({event['completed_count']}/{event['total_count']} completed)")
+    return Panel(
+        Text("\n".join(lines)),
+        border_style="cyan",
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def render_diff_block(path: str, diff_text: str) -> Text:
     block = Text(f"{path}\n", style="bold")
     old_line = None

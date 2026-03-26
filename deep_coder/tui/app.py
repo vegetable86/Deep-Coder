@@ -3,6 +3,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalScroll
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
@@ -132,8 +133,11 @@ class DeepCodeApp(App):
     def action_refresh_command_palette(self) -> None:
         if not self.is_mounted:
             return
-        composer = self.query_one("#composer", Composer)
-        palette = self.query_one("#command-palette", CommandPalette)
+        try:
+            composer = self.query_one("#composer", Composer)
+            palette = self.query_one("#command-palette", CommandPalette)
+        except NoMatches:
+            return
         if not composer.text.strip().startswith("/"):
             palette.set_matches([])
             return
@@ -275,6 +279,8 @@ class DeepCodeApp(App):
         self._command_feedback = result.warning_message or result.status_message or ""
         if result.list_kind == "sessions":
             self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
+        if result.reset_session:
+            self._reset_session_view()
         if result.should_exit:
             self.exit()
             return
@@ -297,3 +303,9 @@ class DeepCodeApp(App):
         if not exact_command:
             return {"action": "execute", "text": match.command_text or f"/{match.name}"}
         return {"action": "execute", "text": user_input}
+
+    def _reset_session_view(self) -> None:
+        self.session_id = None
+        self._timeline_blocks.clear()
+        self._turn_state = "idle"
+        self._refresh_timeline()

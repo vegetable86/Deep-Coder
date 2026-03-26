@@ -5,6 +5,7 @@ import pytest
 from textual.css.query import NoMatches
 
 from deep_coder.tui.app import DeepCodeApp
+from tests.tui.conftest import render_widget_text
 
 
 def test_reopening_session_replays_persisted_events(fake_runtime, fake_project):
@@ -12,7 +13,7 @@ def test_reopening_session_replays_persisted_events(fake_runtime, fake_project):
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
         async with app.run_test(size=(120, 40)):
             app.load_session("session-a")
-            timeline_text = app.query_one("#timeline").renderable.plain
+            timeline_text = render_widget_text(app.query_one("#timeline"))
             assert "mkdir aa" in timeline_text
             assert "prompt 10 | usage 14 | hit 0 | miss 10" in timeline_text
 

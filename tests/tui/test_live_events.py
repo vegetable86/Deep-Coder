@@ -1,6 +1,7 @@
 import asyncio
 
 from deep_coder.tui.app import DeepCodeApp
+from tests.tui.conftest import render_widget_text
 
 
 def test_submit_runs_harness_and_appends_live_events(fake_runtime, fake_project):
@@ -11,7 +12,7 @@ def test_submit_runs_harness_and_appends_live_events(fake_runtime, fake_project)
             composer.text = "make dir aa"
             await pilot.press("enter")
             await pilot.pause()
-            timeline_text = app.query_one("#timeline").renderable.plain
+            timeline_text = render_widget_text(app.query_one("#timeline"))
             assert "mkdir aa" in timeline_text
             assert "prompt 10 | usage 15 | hit 3 | miss 7" in timeline_text
             assert "done" in timeline_text

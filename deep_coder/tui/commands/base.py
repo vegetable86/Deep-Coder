@@ -38,6 +38,7 @@ class CommandResult:
     warning_message: str | None = None
     list_items: list[dict] = field(default_factory=list)
     list_kind: str | None = None
+    reset_session: bool = False
     selected_session_id: str | None = None
     updated_model_name: str | None = None
     should_exit: bool = False

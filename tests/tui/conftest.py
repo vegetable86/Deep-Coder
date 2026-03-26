@@ -37,20 +37,38 @@ class FakeSession:
 class FakeContext:
     def __init__(self, sessions: list[FakeSession]):
         self._sessions = {session.session_id: session for session in sessions}
+        self._new_session_index = 0
 
     def list_sessions(self) -> list[dict]:
         return [session.meta() for session in self._sessions.values()]
 
     def open(self, locator: dict | None = None):
-        session_id = locator["id"] if locator else "session-a"
+        if locator:
+            session_id = locator["id"]
+        else:
+            self._new_session_index += 1
+            session_id = f"session-new-{self._new_session_index}"
+            seed = next(iter(self._sessions.values()))
+            self._sessions[session_id] = FakeSession(
+                session_id=session_id,
+                project_key=seed.project_key,
+                workspace_path=seed.workspace_path,
+            )
         return self._sessions[session_id]
 
 
 class FakeHarness:
     def __init__(self, context: FakeContext):
         self.context = context
+        self.calls: list[dict] = []
 
     def run(self, session_locator, user_input: str, event_sink=None):
+        self.calls.append(
+            {
+                "session_locator": session_locator,
+                "user_input": user_input,
+            }
+        )
         session = self.context.open(locator=session_locator)
         turn_id = "turn-live"
         events = [
@@ -123,6 +141,10 @@ class FakeModel:
 
     def list_models(self) -> list[str]:
         return list(self._models)
+
+
+def render_widget_text(widget) -> str:
+    return str(widget.render())
 
 
 @pytest.fixture

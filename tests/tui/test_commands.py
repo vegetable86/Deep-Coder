@@ -18,6 +18,21 @@ def test_registry_filters_commands_by_prefix():
     assert [match.name for match in matches] == ["history"]
 
 
+def test_session_command_returns_reset_action(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+
+    result = registry.execute(
+        "/session",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
+
+    assert result.reset_session is True
+    assert result.status_message == "new session"
+
+
 def test_model_command_lists_provider_models(fake_runtime, fake_project):
     registry = CommandRegistry.with_builtin_commands()
 

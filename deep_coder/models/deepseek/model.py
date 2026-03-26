@@ -22,7 +22,7 @@ class DeepSeekModel(ModelBase):
     def complete(self, request: dict) -> dict:
         response = self.client.chat.completions.create(
             model=self.config.model_name,
-            messages=request["messages"],
+            messages=_serialize_messages(request["messages"]),
             tools=request.get("tools"),
         )
         message = response.choices[0].message
@@ -63,3 +63,48 @@ def _normalize_tool_arguments(arguments):
     if isinstance(arguments, str):
         return json.loads(arguments or "{}")
     return arguments or {}
+
+
+def _serialize_messages(messages: list[dict]) -> list[dict]:
+    return [_serialize_message(message) for message in messages]
+
+
+def _serialize_message(message: dict) -> dict:
+    if message.get("role") != "assistant" or not message.get("tool_calls"):
+        return message
+    serialized = dict(message)
+    serialized["tool_calls"] = [
+        _serialize_tool_call(tool_call) for tool_call in message["tool_calls"]
+    ]
+    return serialized
+
+
+def _serialize_tool_call(tool_call: dict) -> dict:
+    function = tool_call.get("function")
+    if function is not None:
+        return {
+            "id": tool_call["id"],
+            "type": tool_call.get("type", "function"),
+            "function": {
+                "name": function["name"],
+                "arguments": _serialize_outbound_tool_arguments(
+                    function.get("arguments")
+                ),
+            },
+        }
+    return {
+        "id": tool_call["id"],
+        "type": "function",
+        "function": {
+            "name": tool_call["name"],
+            "arguments": _serialize_outbound_tool_arguments(
+                tool_call.get("arguments")
+            ),
+        },
+    }
+
+
+def _serialize_outbound_tool_arguments(arguments) -> str:
+    if isinstance(arguments, str):
+        return arguments
+    return json.dumps(arguments or {})

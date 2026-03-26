@@ -68,6 +68,7 @@ class TimelineScroll(VerticalScroll):
     LINE_SCROLL_STEP = 4
 
     def action_scroll_down(self) -> None:
+        self._prepare_fast_scroll()
         self.scroll_to(
             y=self.scroll_target_y + self.LINE_SCROLL_STEP,
             animate=False,
@@ -75,11 +76,24 @@ class TimelineScroll(VerticalScroll):
         )
 
     def action_scroll_up(self) -> None:
+        self._prepare_fast_scroll()
         self.scroll_to(
             y=self.scroll_target_y - self.LINE_SCROLL_STEP,
             animate=False,
             immediate=True,
         )
+
+    def _prepare_fast_scroll(self) -> None:
+        # Keep behavior aligned with Textual internals across versions.
+        if hasattr(self, "_user_scroll_interrupt"):
+            self._user_scroll_interrupt = True
+        clear_anchor = getattr(self, "_clear_anchor", None)
+        if callable(clear_anchor):
+            clear_anchor()
+            return
+        release_anchor = getattr(self, "release_anchor", None)
+        if callable(release_anchor):
+            release_anchor()
 
 
 class StatusStrip(Static):

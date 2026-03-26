@@ -153,5 +153,16 @@ def test_timeline_arrow_keys_scroll_multiple_lines_when_focused(fake_runtime, fa
             await pilot.pause()
 
             assert timeline_scroll.scroll_y >= start_scroll_y + 3
+            if hasattr(timeline_scroll, "_user_scroll_interrupt"):
+                assert timeline_scroll._user_scroll_interrupt is True
+
+            timeline_scroll.scroll_to(y=40, animate=False, immediate=True)
+            await pilot.pause()
+
+            start_scroll_y = timeline_scroll.scroll_y
+            await pilot.press("up")
+            await pilot.pause()
+
+            assert timeline_scroll.scroll_y <= start_scroll_y - 3
 
     asyncio.run(run())

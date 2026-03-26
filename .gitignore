@@ -16,3 +16,4 @@ Thumbs.db
 .idea/
 .deep/
 deepseek-api/
+agentLoop.py

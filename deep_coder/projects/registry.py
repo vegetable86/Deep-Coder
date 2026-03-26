@@ -20,6 +20,14 @@ class ProjectRegistry:
         self.config_path = self.root / "config.toml"
         self.projects_dir = self.root / "projects"
 
+    def default_model(self) -> str | None:
+        return self._load().get("default_model")
+
+    def set_default_model(self, model_name: str) -> None:
+        data = self._load()
+        data["default_model"] = model_name
+        self._save(data)
+
     def open_workspace(self, workspace: Path) -> ProjectRecord:
         workspace = Path(workspace).resolve()
         data = self._load()
@@ -43,6 +51,7 @@ class ProjectRegistry:
             return {"projects": []}
         data = {"projects": []}
         current_project = None
+        default_model = None
         project = None
 
         for raw_line in self.config_path.read_text().splitlines():
@@ -61,9 +70,13 @@ class ProjectRegistry:
                 project[key] = value
             elif key == "current_project":
                 current_project = value
+            elif key == "default_model":
+                default_model = value
 
         if current_project:
             data["current_project"] = current_project
+        if default_model:
+            data["default_model"] = default_model
         return data
 
     def _save(self, data: dict) -> None:
@@ -74,6 +87,9 @@ class ProjectRegistry:
         current_project = data.get("current_project")
         if current_project:
             lines.append(f'current_project = "{self._escape(current_project)}"')
+        default_model = data.get("default_model")
+        if default_model:
+            lines.append(f'default_model = "{self._escape(default_model)}"')
 
         for project in data.get("projects", []):
             lines.extend(

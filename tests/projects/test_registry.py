@@ -25,3 +25,17 @@ def test_registry_reuses_existing_project_for_same_workspace(tmp_path):
     second = registry.open_workspace(workspace)
 
     assert second.key == first.key
+
+
+def test_registry_round_trips_default_model(tmp_path):
+    root = tmp_path / ".deepcode"
+    workspace = (tmp_path / "workspace").resolve()
+    workspace.mkdir()
+    registry = ProjectRegistry(root=root)
+
+    registry.set_default_model("deepseek-reasoner")
+    registry.open_workspace(workspace)
+
+    reloaded = ProjectRegistry(root=root)
+
+    assert reloaded.default_model() == "deepseek-reasoner"

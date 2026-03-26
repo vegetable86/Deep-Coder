@@ -20,13 +20,12 @@ def render_tool_output(text: str, max_chars: int = 400) -> Text:
 
 def render_usage_block(usage: dict) -> Text:
     return Text(
-        "\n".join(
+        " | ".join(
             [
-                f"prompt_tokens: {usage.get('prompt_tokens', 0)}",
-                f"completion_tokens: {usage.get('completion_tokens', 0)}",
-                f"total_tokens: {usage.get('total_tokens', 0)}",
-                f"cache_hit_tokens: {usage.get('cache_hit_tokens', 0)}",
-                f"cache_miss_tokens: {usage.get('cache_miss_tokens', 0)}",
+                f"prompt {usage.get('prompt_tokens', 0)}",
+                f"usage {usage.get('total_tokens', 0)}",
+                f"hit {usage.get('cache_hit_tokens', 0)}",
+                f"miss {usage.get('cache_miss_tokens', 0)}",
             ]
         ),
         style="magenta",

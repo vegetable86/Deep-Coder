@@ -2,6 +2,7 @@ from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
     render_tool_output,
+    render_usage_block,
 )
 
 
@@ -31,3 +32,16 @@ def test_diff_block_keeps_all_changed_hunks_with_line_numbers():
     assert "notes.txt" in block.plain
     assert "1" in block.plain
     assert "hello runtime" in block.plain
+
+
+def test_usage_block_renders_on_one_line():
+    block = render_usage_block(
+        {
+            "prompt_tokens": 10,
+            "total_tokens": 15,
+            "cache_hit_tokens": 3,
+            "cache_miss_tokens": 7,
+        }
+    )
+
+    assert block.plain == "prompt 10 | usage 15 | hit 3 | miss 7"

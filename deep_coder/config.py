@@ -20,12 +20,13 @@ class RuntimeConfig:
         cls,
         workdir: Path | None = None,
         state_dir: Path | None = None,
+        model_name: str | None = None,
     ):
         workdir = (workdir or Path.cwd()).resolve()
         state_dir = state_dir or (Path.home() / ".deepcode")
         return cls(
             model_provider="deepseek",
-            model_name="deepseek-chat",
+            model_name=model_name or "deepseek-chat",
             api_key=os.environ["DEEPSEEK_API_KEY"],
             base_url="https://api.deepseek.com",
             workdir=workdir,
@@ -36,10 +37,10 @@ class RuntimeConfig:
         )
 
     @classmethod
-    def from_project(cls, project):
+    def from_project(cls, project, model_name: str | None = None):
         return cls(
             model_provider="deepseek",
-            model_name="deepseek-chat",
+            model_name=model_name or "deepseek-chat",
             api_key=os.environ["DEEPSEEK_API_KEY"],
             base_url="https://api.deepseek.com",
             workdir=project.path,

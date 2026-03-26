@@ -68,3 +68,28 @@ def test_deepseek_complete_normalizes_tool_args_and_usage(monkeypatch, tmp_path)
     assert response["tool_calls"][0]["arguments"] == {"path": "README.md"}
     assert response["usage"]["cache_hit_tokens"] == 3
     assert response["usage"]["cache_miss_tokens"] == 7
+
+
+def test_deepseek_list_models_returns_model_ids(monkeypatch, tmp_path):
+    class FakeModelItem:
+        def __init__(self, model_id):
+            self.id = model_id
+
+    class FakeListResponse:
+        data = [FakeModelItem("deepseek-chat"), FakeModelItem("deepseek-reasoner")]
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    model = DeepSeekModel(config=RuntimeConfig.from_env(workdir=tmp_path))
+    model.client = type(
+        "Client",
+        (),
+        {
+            "models": type(
+                "Models",
+                (),
+                {"list": staticmethod(lambda: FakeListResponse())},
+            )()
+        },
+    )()
+
+    assert model.list_models() == ["deepseek-chat", "deepseek-reasoner"]

@@ -94,6 +94,26 @@ class FakeHarness:
         return SimpleNamespace(session_id=session.session_id, final_text="done")
 
 
+class FakeRegistry:
+    def __init__(self, default_model: str = "deepseek-chat"):
+        self._default_model = default_model
+
+    def default_model(self) -> str:
+        return self._default_model
+
+    def set_default_model(self, model_name: str) -> None:
+        self._default_model = model_name
+
+
+class FakeModel:
+    def __init__(self, config, models: tuple[str, ...] = ("deepseek-chat", "deepseek-reasoner")):
+        self.config = config
+        self._models = models
+
+    def list_models(self) -> list[str]:
+        return list(self._models)
+
+
 @pytest.fixture
 def fake_project(tmp_path: Path) -> ProjectRecord:
     workspace = tmp_path / "repo"
@@ -144,8 +164,11 @@ def fake_runtime(fake_project: ProjectRecord):
         events=[],
     )
     context = FakeContext([session_a, session_b, session_other])
+    config = SimpleNamespace(model_name="deepseek-chat")
     return {
-        "config": SimpleNamespace(model_name="deepseek-chat"),
+        "config": config,
+        "model": FakeModel(config=config),
         "context": context,
         "harness": FakeHarness(context),
+        "registry": FakeRegistry(default_model=config.model_name),
     }

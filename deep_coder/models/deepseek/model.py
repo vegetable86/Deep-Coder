@@ -10,6 +10,15 @@ class DeepSeekModel(ModelBase):
         self.config = config
         self.client = OpenAI(api_key=config.api_key, base_url=config.base_url)
 
+    def list_models(self) -> list[str]:
+        response = self.client.models.list()
+        models = []
+        for item in getattr(response, "data", []):
+            model_id = getattr(item, "id", None)
+            if model_id:
+                models.append(model_id)
+        return sorted(models)
+
     def complete(self, request: dict) -> dict:
         response = self.client.chat.completions.create(
             model=self.config.model_name,

@@ -30,3 +30,20 @@ def test_build_runtime_uses_project_state_dir(monkeypatch, tmp_path):
 
     assert runtime["config"].project_key == "repo-abc123"
     assert runtime["config"].state_dir == project.state_dir
+
+
+def test_build_runtime_uses_explicit_model_name(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    project = ProjectRecord(
+        path=workspace,
+        name="repo",
+        key="repo-abc123",
+        state_dir=tmp_path / ".deepcode" / "projects" / "repo-abc123",
+        last_opened_at="2026-03-26T00:00:00Z",
+    )
+
+    runtime = build_runtime(project=project, model_name="deepseek-reasoner")
+
+    assert runtime["config"].model_name == "deepseek-reasoner"

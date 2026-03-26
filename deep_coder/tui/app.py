@@ -6,6 +6,8 @@ from textual.containers import Container, VerticalScroll
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
+from deep_coder.tui.commands import CommandRegistry
+from deep_coder.tui.commands.parser import parse_command_text
 from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
@@ -13,6 +15,7 @@ from deep_coder.tui.render import (
     render_tool_output,
     render_usage_block,
 )
+from deep_coder.tui.screens.command_palette import CommandPalette
 from deep_coder.tui.screens.session_switcher import SessionSwitcher
 
 
@@ -24,10 +27,30 @@ class TimelineEvent(Message):
 
 class Composer(TextArea):
     async def _on_key(self, event) -> None:
+        if event.key == "escape" and self.app.is_command_active:
+            event.stop()
+            event.prevent_default()
+            self.app.action_cancel_command()
+            return
         if event.key == "enter":
             event.stop()
             event.prevent_default()
             self.app.action_submit_composer()
+            return
+        if event.key == "tab" and self.app.in_command_mode:
+            event.stop()
+            event.prevent_default()
+            self.app.action_complete_command()
+            return
+        if event.key == "down" and self.app.in_command_mode:
+            event.stop()
+            event.prevent_default()
+            self.app.action_move_command_selection(1)
+            return
+        if event.key == "up" and self.app.in_command_mode:
+            event.stop()
+            event.prevent_default()
+            self.app.action_move_command_selection(-1)
             return
         if event.key == "shift+enter":
             event.stop()
@@ -49,17 +72,38 @@ class DeepCodeApp(App):
         self.session_id = None
         self._timeline_blocks = []
         self._turn_state = "idle"
+        self._command_feedback = ""
+        self._command_registry = CommandRegistry.with_builtin_commands()
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="timeline-scroll"):
             yield Static("", id="timeline")
         with Container(id="bottom-pane"):
             yield Static(id="status-strip")
+            yield CommandPalette()
             yield Composer(id="composer")
 
     def on_mount(self) -> None:
         self.query_one("#composer", Composer).focus()
+        self.query_one("#command-palette", CommandPalette).display = False
         self._update_status_strip()
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id == "composer":
+            self.action_refresh_command_palette()
+
+    @property
+    def in_command_mode(self) -> bool:
+        if not self.is_mounted:
+            return False
+        return self.query_one("#composer", Composer).text.strip().startswith("/")
+
+    @property
+    def is_command_active(self) -> bool:
+        if not self.is_mounted:
+            return False
+        palette = self.query_one("#command-palette", CommandPalette)
+        return self.in_command_mode or bool(palette.display)
 
     def action_open_session_switcher(self) -> None:
         self.push_screen(SessionSwitcher(self._project_sessions()), self._on_session_selected)
@@ -69,10 +113,64 @@ class DeepCodeApp(App):
         user_input = composer.text.rstrip("\n")
         if not user_input.strip():
             return
+        if self.in_command_mode:
+            outcome = self._resolve_command_submission(user_input)
+            if outcome["action"] == "complete":
+                composer.load_text(outcome["text"])
+                self.action_refresh_command_palette()
+                return
+            self._run_command(outcome["text"])
+            composer.load_text("")
+            self.action_refresh_command_palette()
+            return
         composer.load_text("")
+        self._command_feedback = ""
         self._turn_state = "running"
         self._update_status_strip()
         self.run_turn(user_input)
+
+    def action_refresh_command_palette(self) -> None:
+        if not self.is_mounted:
+            return
+        composer = self.query_one("#composer", Composer)
+        palette = self.query_one("#command-palette", CommandPalette)
+        if not composer.text.strip().startswith("/"):
+            palette.set_matches([])
+            return
+        matches = self._command_registry.match(
+            composer.text,
+            runtime=self.runtime,
+            project=self.project,
+            session_id=self.session_id,
+            turn_state=self._turn_state,
+        )
+        palette.set_matches(matches)
+
+    def action_complete_command(self) -> None:
+        palette = self.query_one("#command-palette", CommandPalette)
+        match = palette.current_match()
+        if match is None:
+            return
+        composer = self.query_one("#composer", Composer)
+        filled = match.command_text or f"/{match.name}"
+        if match.kind == "command" and match.argument_hint:
+            filled = f"{filled} "
+        composer.load_text(filled)
+
+    def action_move_command_selection(self, delta: int) -> None:
+        palette = self.query_one("#command-palette", CommandPalette)
+        if not palette.display or palette.option_count == 0:
+            return
+        current = palette.highlighted or 0
+        palette.highlighted = (current + delta) % palette.option_count
+
+    def action_cancel_command(self) -> None:
+        composer = self.query_one("#composer", Composer)
+        palette = self.query_one("#command-palette", CommandPalette)
+        composer.load_text("")
+        palette.set_matches([])
+        self._command_feedback = ""
+        self._update_status_strip()
 
     def load_session(self, session_id: str) -> None:
         session = self.runtime["context"].open(locator={"id": session_id})
@@ -145,7 +243,46 @@ class DeepCodeApp(App):
         self.query_one("#timeline", Static).update(timeline)
 
     def _update_status_strip(self) -> None:
-        self.query_one("#status-strip", Static).update(
-            f"{self.project.name} | {self.session_id or 'new'} | "
-            f"{self.runtime['config'].model_name} | {self._turn_state}"
+        parts = [
+            self.project.name,
+            self.session_id or "new",
+            self.runtime["config"].model_name,
+            self._turn_state,
+        ]
+        if self._command_feedback:
+            parts.append(self._command_feedback)
+        self.query_one("#status-strip", Static).update(" | ".join(parts))
+
+    def _run_command(self, command_text: str) -> None:
+        result = self._command_registry.execute(
+            command_text,
+            runtime=self.runtime,
+            project=self.project,
+            session_id=self.session_id,
+            turn_state=self._turn_state,
         )
+        self._command_feedback = result.warning_message or result.status_message or ""
+        if result.list_kind == "sessions" and result.list_items:
+            self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
+        if result.should_exit:
+            self.exit()
+            return
+        self._update_status_strip()
+
+    def _resolve_command_submission(self, user_input: str) -> dict:
+        palette = self.query_one("#command-palette", CommandPalette)
+        match = palette.current_match() if palette.display else None
+        if match is None:
+            return {"action": "execute", "text": user_input}
+
+        parsed = parse_command_text(user_input)
+        if match.kind == "model":
+            return {"action": "execute", "text": match.command_text or user_input}
+
+        exact_command = parsed.name == match.name
+        has_args = bool(parsed.args.strip())
+        if match.argument_hint and not has_args:
+            return {"action": "complete", "text": f"/{match.name} "}
+        if not exact_command:
+            return {"action": "execute", "text": match.command_text or f"/{match.name}"}
+        return {"action": "execute", "text": user_input}

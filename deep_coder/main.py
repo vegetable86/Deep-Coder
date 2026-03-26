@@ -17,11 +17,17 @@ def build_runtime(
     workdir: Path | None = None,
     state_dir: Path | None = None,
     project: ProjectRecord | None = None,
+    model_name: str | None = None,
+    registry=None,
 ) -> dict:
     if project is not None:
-        config = RuntimeConfig.from_project(project)
+        config = RuntimeConfig.from_project(project, model_name=model_name)
     else:
-        config = RuntimeConfig.from_env(workdir=workdir, state_dir=state_dir)
+        config = RuntimeConfig.from_env(
+            workdir=workdir,
+            state_dir=state_dir,
+            model_name=model_name,
+        )
     model = DeepSeekModel(config=config)
     tools = ToolRegistry.from_builtin(config=config, workdir=config.workdir)
     prompt = DeepCoderPrompt(config=config)
@@ -47,6 +53,7 @@ def build_runtime(
         "prompt": prompt,
         "context": context,
         "harness": harness,
+        "registry": registry,
     }
 
 

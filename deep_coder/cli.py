@@ -12,7 +12,11 @@ def resolve_launch_context(
     cwd = (cwd or Path.cwd()).resolve()
     registry = ProjectRegistry(root=registry_root or (Path.home() / ".deepcode"))
     project = registry.open_workspace(cwd)
-    runtime = build_runtime(project=project)
+    runtime = build_runtime(
+        project=project,
+        model_name=registry.default_model(),
+        registry=registry,
+    )
     return project, runtime
 
 

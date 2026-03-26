@@ -57,7 +57,10 @@ def test_history_command_returns_only_active_project_sessions(fake_runtime, fake
         turn_state="idle",
     )
 
-    assert [item["id"] for item in result.list_items] == ["session-a", "session-b"]
+    assert [(item["id"], item["preview"]) for item in result.list_items] == [
+        ("session-a", "make dir aa"),
+        ("session-b", "show history selector preview"),
+    ]
 
 
 def test_exit_command_warns_while_running(fake_runtime, fake_project):

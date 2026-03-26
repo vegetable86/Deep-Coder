@@ -16,11 +16,22 @@ class FakeSession:
     workspace_path: str | None = None
 
     def meta(self) -> dict:
-        return {
+        meta = {
             "id": self.session_id,
             "project_key": self.project_key,
             "workspace_path": self.workspace_path,
         }
+        for message in self.messages:
+            if message.get("role") != "user":
+                continue
+            content = message.get("content")
+            if not isinstance(content, str):
+                continue
+            preview = " ".join(content.split())
+            if preview:
+                meta["preview"] = preview
+                break
+        return meta
 
 
 class FakeContext:
@@ -133,6 +144,7 @@ def fake_runtime(fake_project: ProjectRecord):
         session_id="session-a",
         project_key=fake_project.key,
         workspace_path=str(fake_project.path),
+        messages=[{"role": "user", "content": "make dir aa"}],
         events=[
             {"type": "message_committed", "role": "user", "text": "make dir aa"},
             {
@@ -155,12 +167,14 @@ def fake_runtime(fake_project: ProjectRecord):
         session_id="session-b",
         project_key=fake_project.key,
         workspace_path=str(fake_project.path),
+        messages=[{"role": "user", "content": "show history selector preview"}],
         events=[],
     )
     session_other = FakeSession(
         session_id="session-other",
         project_key="other-project",
         workspace_path=str(fake_project.path.parent / "other"),
+        messages=[{"role": "user", "content": "other project prompt"}],
         events=[],
     )
     context = FakeContext([session_a, session_b, session_other])

@@ -58,3 +58,49 @@ def test_filesystem_store_persists_events_and_project_meta(tmp_path):
     assert reopened.events == [{"type": "turn_started", "turn_id": "t1"}]
     assert reopened.meta()["project_key"] == "repo-abc123"
     assert reopened.meta()["workspace_path"] == str(workspace)
+
+
+def test_filesystem_store_lists_session_preview_from_first_user_message(tmp_path):
+    store = FileSystemSessionStore(root=tmp_path)
+
+    session = store.open()
+    session.append(
+        {
+            "role": "user",
+            "content": "  make   history\nselector   readable  ",
+        }
+    )
+    session.append({"role": "assistant", "content": "ok"})
+    store.save(session)
+
+    listed = store.list_sessions()
+    reopened = store.open(locator={"id": session.session_id})
+
+    assert listed[0]["preview"] == "make history selector readable"
+    assert reopened.meta()["preview"] == "make history selector readable"
+
+
+def test_filesystem_store_backfills_preview_for_existing_session_metadata(tmp_path):
+    session_dir = tmp_path / "sessions" / "session-a"
+    session_dir.mkdir(parents=True)
+    (session_dir / "meta.json").write_text(json.dumps({"id": "session-a"}, indent=2))
+    (session_dir / "messages.jsonl").write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "content": "show me the first prompt in history",
+            }
+        )
+        + "\n"
+    )
+
+    store = FileSystemSessionStore(root=tmp_path)
+
+    listed = store.list_sessions()
+
+    assert listed == [
+        {
+            "id": "session-a",
+            "preview": "show me the first prompt in history",
+        }
+    ]

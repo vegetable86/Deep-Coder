@@ -2,7 +2,7 @@ import json
 import uuid
 from pathlib import Path
 
-from deep_coder.context.session import Session
+from deep_coder.context.session import Session, derive_session_preview
 from deep_coder.context.stores.base import SessionStoreBase
 
 
@@ -24,7 +24,12 @@ class FileSystemSessionStore(SessionStoreBase):
         for session_dir in sorted(self.sessions_dir.iterdir()):
             meta_path = session_dir / "meta.json"
             if meta_path.exists():
-                sessions.append(json.loads(meta_path.read_text()))
+                meta = json.loads(meta_path.read_text())
+                if not meta.get("preview"):
+                    preview = self._load_preview(session_dir / "messages.jsonl")
+                    if preview:
+                        meta["preview"] = preview
+                sessions.append(meta)
         return sessions
 
     def open(self, locator: dict | None = None):
@@ -95,3 +100,14 @@ class FileSystemSessionStore(SessionStoreBase):
         (context_dir / "state.json").write_text(
             json.dumps(session.strategy_state, indent=2)
         )
+
+    @staticmethod
+    def _load_preview(messages_path: Path) -> str | None:
+        if not messages_path.exists():
+            return None
+        messages = [
+            json.loads(line)
+            for line in messages_path.read_text().splitlines()
+            if line.strip()
+        ]
+        return derive_session_preview(messages)

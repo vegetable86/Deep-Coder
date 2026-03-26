@@ -273,7 +273,7 @@ class DeepCodeApp(App):
             turn_state=self._turn_state,
         )
         self._command_feedback = result.warning_message or result.status_message or ""
-        if result.list_kind == "sessions" and result.list_items:
+        if result.list_kind == "sessions":
             self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
         if result.should_exit:
             self.exit()

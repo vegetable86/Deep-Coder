@@ -21,7 +21,10 @@ def test_session_switcher_lists_only_project_sessions(fake_runtime, fake_project
             await pilot.press("ctrl+l")
             overlay = app.screen.query_one("#session-switcher")
             labels = [option.prompt for option in overlay.options]
-            assert labels == ["session-a", "session-b"]
+            assert labels == [
+                "session-a  make dir aa",
+                "session-b  show history selector preview",
+            ]
 
     asyncio.run(run())
 
@@ -81,7 +84,10 @@ def test_enter_selects_highlighted_command_without_tab(fake_runtime, fake_projec
             await pilot.press("enter")
             overlay = app.screen.query_one("#session-switcher")
             labels = [option.prompt for option in overlay.options]
-            assert labels == ["session-a", "session-b"]
+            assert labels == [
+                "session-a  make dir aa",
+                "session-b  show history selector preview",
+            ]
 
     asyncio.run(run())
 

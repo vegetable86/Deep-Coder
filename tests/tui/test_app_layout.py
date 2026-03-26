@@ -167,6 +167,27 @@ def test_busy_command_shows_warning_in_status_strip(fake_runtime, fake_project):
     asyncio.run(run())
 
 
+def test_status_strip_animates_only_while_busy(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            status = app.query_one("#status-strip")
+
+            app._turn_state = "running"
+            app._update_status_strip()
+
+            assert status.has_class("busy") is True
+            assert status._pulse_timer is not None
+
+            app._turn_state = "idle"
+            app._update_status_strip()
+
+            assert status.has_class("busy") is False
+            assert status._pulse_timer is None
+
+    asyncio.run(run())
+
+
 def test_session_command_clears_loaded_timeline(fake_runtime, fake_project):
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)

@@ -4,14 +4,31 @@ from deep_coder.tui.render import (
     render_tool_output,
     render_usage_block,
 )
+from tests.tui.conftest import render_plain_text
 
 
 def test_message_blocks_do_not_render_speaker_labels():
     user = render_message_block(role="user", text="make dir aa")
     assistant = render_message_block(role="assistant", text="done")
 
-    assert "User Message" not in user.plain
-    assert "Assistant" not in assistant.plain
+    assert "User Message" not in render_plain_text(user)
+    assert "Assistant" not in render_plain_text(assistant)
+
+
+def test_message_blocks_render_markdown_lite_without_raw_markers():
+    block = render_message_block(
+        role="assistant",
+        text="**bold** `code`\n- item\n> quote\n```py\nprint('x')\n```",
+    )
+
+    rendered = render_plain_text(block)
+
+    assert "bold" in rendered
+    assert "code" in rendered
+    assert "item" in rendered
+    assert "quote" in rendered
+    assert "print('x')" in rendered
+    assert "```" not in rendered
 
 
 def test_tool_output_truncates_long_plain_output():

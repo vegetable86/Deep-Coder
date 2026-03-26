@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from rich.console import Console
+from textual.visual import RichVisual
 
 from deep_coder.projects.registry import ProjectRecord
 
@@ -143,8 +146,29 @@ class FakeModel:
         return list(self._models)
 
 
-def render_widget_text(widget) -> str:
-    return str(widget.render())
+def render_plain_text(renderable, width: int = 120) -> str:
+    if isinstance(renderable, RichVisual):
+        renderable = renderable._renderable
+    capture = StringIO()
+    console = Console(
+        file=capture,
+        force_terminal=False,
+        color_system=None,
+        width=width,
+    )
+    console.print(renderable, end="")
+    return capture.getvalue().rstrip("\n")
+
+
+def render_widget_text(widget, width: int = 120) -> str:
+    children = list(getattr(widget, "children", []))
+    if children:
+        return "\n".join(
+            chunk
+            for chunk in (render_widget_text(child, width=width) for child in children)
+            if chunk
+        )
+    return render_plain_text(widget.render(), width=width)
 
 
 @pytest.fixture

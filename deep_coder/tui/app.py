@@ -1,3 +1,4 @@
+from rich.console import Group, RenderableType
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
@@ -62,6 +63,79 @@ class Composer(TextArea):
         await super()._on_key(event)
 
 
+class StatusStrip(Static):
+    _PULSE_STYLES = (
+        "black on rgb(88,124,144)",
+        "black on rgb(102,148,170)",
+        "black on rgb(122,178,204)",
+        "black on rgb(102,148,170)",
+    )
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._project_name = ""
+        self._session_id = "new"
+        self._model_name = ""
+        self._turn_state = "idle"
+        self._command_feedback = ""
+        self._pulse_index = 0
+        self._pulse_timer = None
+
+    def set_state(
+        self,
+        *,
+        project_name: str,
+        session_id: str | None,
+        model_name: str,
+        turn_state: str,
+        command_feedback: str = "",
+    ) -> None:
+        self._project_name = project_name
+        self._session_id = session_id or "new"
+        self._model_name = model_name
+        self._turn_state = turn_state
+        self._command_feedback = command_feedback
+        self._sync_busy_state()
+        self.update(self._build_text())
+
+    def _sync_busy_state(self) -> None:
+        is_busy = self._turn_state == "running" or self._turn_state.startswith("tool:")
+        self.set_class(is_busy, "busy")
+        if is_busy:
+            if self._pulse_timer is None:
+                self._pulse_timer = self.set_interval(0.6, self._advance_pulse)
+        else:
+            self._pulse_index = 0
+            if self._pulse_timer is not None:
+                self._pulse_timer.stop()
+                self._pulse_timer = None
+
+    def _advance_pulse(self) -> None:
+        if not self.has_class("busy"):
+            return
+        self._pulse_index = (self._pulse_index + 1) % len(self._PULSE_STYLES)
+        self.update(self._build_text())
+
+    def _build_text(self) -> Text:
+        text = Text()
+        text.append(self._project_name, style="bold white")
+        text.append(" | ", style="dim")
+        text.append(self._session_id, style="cyan")
+        text.append(" | ", style="dim")
+        text.append(self._model_name, style="magenta")
+        text.append(" | ", style="dim")
+        text.append(self._turn_state, style=self._turn_state_style())
+        if self._command_feedback:
+            text.append(" | ", style="dim")
+            text.append(self._command_feedback, style="yellow")
+        return text
+
+    def _turn_state_style(self) -> str:
+        if self.has_class("busy"):
+            return self._PULSE_STYLES[self._pulse_index]
+        return "bold white on rgb(58,58,58)"
+
+
 class DeepCodeApp(App):
     CSS_PATH = "styles.tcss"
     BINDINGS = [Binding("ctrl+l", "open_session_switcher", "Sessions")]
@@ -80,7 +154,7 @@ class DeepCodeApp(App):
         with VerticalScroll(id="timeline-scroll"):
             yield Static("", id="timeline")
         with Container(id="bottom-pane"):
-            yield Static(id="status-strip")
+            yield StatusStrip(id="status-strip")
             yield CommandPalette()
             yield Composer(id="composer")
 
@@ -240,12 +314,7 @@ class DeepCodeApp(App):
         self._timeline_blocks.append(block)
 
     def _refresh_timeline(self, *, follow_tail: bool = False) -> None:
-        timeline = Text()
-        for index, block in enumerate(self._timeline_blocks):
-            if index:
-                timeline.append("\n\n")
-            timeline.append_text(block)
-        self.query_one("#timeline", Static).update(timeline)
+        self.query_one("#timeline", Static).update(self._compose_timeline_renderable())
         if follow_tail:
             self.query_one("#timeline-scroll", VerticalScroll).scroll_end(
                 animate=False,
@@ -258,15 +327,13 @@ class DeepCodeApp(App):
         return self.query_one("#timeline-scroll", VerticalScroll).is_vertical_scroll_end
 
     def _update_status_strip(self) -> None:
-        parts = [
-            self.project.name,
-            self.session_id or "new",
-            self.runtime["config"].model_name,
-            self._turn_state,
-        ]
-        if self._command_feedback:
-            parts.append(self._command_feedback)
-        self.query_one("#status-strip", Static).update(" | ".join(parts))
+        self.query_one("#status-strip", StatusStrip).set_state(
+            project_name=self.project.name,
+            session_id=self.session_id,
+            model_name=self.runtime["config"].model_name,
+            turn_state=self._turn_state,
+            command_feedback=self._command_feedback,
+        )
 
     def _run_command(self, command_text: str) -> None:
         result = self._command_registry.execute(
@@ -309,3 +376,14 @@ class DeepCodeApp(App):
         self._timeline_blocks.clear()
         self._turn_state = "idle"
         self._refresh_timeline()
+        self._update_status_strip()
+
+    def _compose_timeline_renderable(self) -> RenderableType:
+        if not self._timeline_blocks:
+            return Text("")
+        blocks: list[RenderableType] = []
+        for index, block in enumerate(self._timeline_blocks):
+            blocks.append(block)
+            if index < len(self._timeline_blocks) - 1:
+                blocks.append(Text(""))
+        return Group(*blocks)

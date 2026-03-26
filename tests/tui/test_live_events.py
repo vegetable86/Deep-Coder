@@ -100,3 +100,28 @@ def test_live_events_do_not_force_scroll_when_user_moved_up(fake_runtime, fake_p
             assert not timeline_scroll.is_vertical_scroll_end
 
     asyncio.run(run())
+
+
+def test_live_markdown_events_render_without_raw_fences(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "message_committed",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "role": "assistant",
+                    "text": "**done**\n- item\n> note\n```py\nprint('x')\n```",
+                }
+            )
+            await asyncio.sleep(0)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "done" in timeline_text
+            assert "item" in timeline_text
+            assert "note" in timeline_text
+            assert "print('x')" in timeline_text
+            assert "```" not in timeline_text
+
+    asyncio.run(run())

@@ -188,6 +188,45 @@ def test_status_strip_animates_only_while_busy(fake_runtime, fake_project):
     asyncio.run(run())
 
 
+def test_timeline_focus_action_moves_focus_from_composer(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            timeline_scroll = app.query_one("#timeline-scroll")
+
+            assert composer.has_focus is True
+            assert timeline_scroll.has_focus is False
+
+            await app.run_action("focus_timeline")
+            await pilot.pause()
+
+            assert timeline_scroll.has_focus is True
+            assert composer.has_focus is False
+
+    asyncio.run(run())
+
+
+def test_escape_returns_focus_to_composer_from_timeline(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            timeline_scroll = app.query_one("#timeline-scroll")
+
+            await app.run_action("focus_timeline")
+            await pilot.pause()
+            assert timeline_scroll.has_focus is True
+
+            await pilot.press("escape")
+            await pilot.pause()
+
+            assert composer.has_focus is True
+            assert timeline_scroll.has_focus is False
+
+    asyncio.run(run())
+
+
 def test_session_command_clears_loaded_timeline(fake_runtime, fake_project):
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)

@@ -31,6 +31,14 @@ def test_message_blocks_render_markdown_lite_without_raw_markers():
     assert "```" not in rendered
 
 
+def test_message_blocks_render_headings_without_raw_hashes():
+    block = render_message_block(role="assistant", text="### Title\nbody")
+    rendered = render_plain_text(block)
+
+    assert "Title" in rendered
+    assert "###" not in rendered
+
+
 def test_tool_output_truncates_long_plain_output():
     block = render_tool_output("x" * 600, max_chars=40)
     assert block.plain.endswith("...")

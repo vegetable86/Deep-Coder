@@ -63,6 +63,10 @@ class Composer(TextArea):
         await super()._on_key(event)
 
 
+class TimelineScroll(VerticalScroll):
+    can_focus = True
+
+
 class StatusStrip(Static):
     _PULSE_STYLES = (
         "black on rgb(88,124,144)",
@@ -138,7 +142,10 @@ class StatusStrip(Static):
 
 class DeepCodeApp(App):
     CSS_PATH = "styles.tcss"
-    BINDINGS = [Binding("ctrl+l", "open_session_switcher", "Sessions")]
+    BINDINGS = [
+        Binding("ctrl+l", "open_session_switcher", "Sessions"),
+        Binding("ctrl+j", "focus_timeline", "Timeline"),
+    ]
 
     def __init__(self, runtime, project):
         super().__init__()
@@ -151,7 +158,7 @@ class DeepCodeApp(App):
         self._command_registry = CommandRegistry.with_builtin_commands()
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="timeline-scroll"):
+        with TimelineScroll(id="timeline-scroll"):
             yield Static("", id="timeline")
         with Container(id="bottom-pane"):
             yield StatusStrip(id="status-strip")
@@ -166,6 +173,15 @@ class DeepCodeApp(App):
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if event.text_area.id == "composer":
             self.action_refresh_command_palette()
+
+    def on_key(self, event) -> None:
+        if event.key != "escape":
+            return
+        timeline = self.query_one("#timeline-scroll", TimelineScroll)
+        if self.focused is timeline:
+            event.stop()
+            event.prevent_default()
+            self.set_focus(self.query_one("#composer", Composer))
 
     @property
     def in_command_mode(self) -> bool:
@@ -182,6 +198,9 @@ class DeepCodeApp(App):
 
     def action_open_session_switcher(self) -> None:
         self.push_screen(SessionSwitcher(self._project_sessions()), self._on_session_selected)
+
+    def action_focus_timeline(self) -> None:
+        self.set_focus(self.query_one("#timeline-scroll", TimelineScroll))
 
     def action_submit_composer(self) -> None:
         composer = self.query_one("#composer", Composer)
@@ -316,7 +335,7 @@ class DeepCodeApp(App):
     def _refresh_timeline(self, *, follow_tail: bool = False) -> None:
         self.query_one("#timeline", Static).update(self._compose_timeline_renderable())
         if follow_tail:
-            self.query_one("#timeline-scroll", VerticalScroll).scroll_end(
+            self.query_one("#timeline-scroll", TimelineScroll).scroll_end(
                 animate=False,
                 x_axis=False,
             )
@@ -324,7 +343,7 @@ class DeepCodeApp(App):
     def _timeline_is_at_end(self) -> bool:
         if not self.is_mounted:
             return False
-        return self.query_one("#timeline-scroll", VerticalScroll).is_vertical_scroll_end
+        return self.query_one("#timeline-scroll", TimelineScroll).is_vertical_scroll_end
 
     def _update_status_strip(self) -> None:
         self.query_one("#status-strip", StatusStrip).set_state(

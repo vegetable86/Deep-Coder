@@ -91,6 +91,13 @@ def _render_markdown_lite(text: str) -> RenderableType:
             index += 1
             continue
 
+        heading = _parse_heading(line)
+        if heading is not None:
+            level, title = heading
+            blocks.append(_render_heading(level, title))
+            index += 1
+            continue
+
         if line.startswith("```"):
             language = line[3:].strip()
             index += 1
@@ -177,6 +184,18 @@ def _render_paragraph(lines: list[str]) -> Text:
     return paragraph
 
 
+def _render_heading(level: int, title: str) -> Text:
+    styles = {
+        1: "bold underline white",
+        2: "bold white",
+        3: "bold rgb(220,220,220)",
+        4: "bold rgb(200,200,200)",
+        5: "bold dim",
+        6: "dim",
+    }
+    return Text(title, style=styles.get(level, "bold"))
+
+
 def _render_inline(source: str, base_style: str = "") -> Text:
     text = Text()
     index = 0
@@ -235,7 +254,12 @@ def _with_spacing(blocks: list[RenderableType]) -> list[RenderableType]:
 
 
 def _starts_special_block(line: str) -> bool:
-    return line.startswith("```") or _is_quote_line(line) or _is_bullet_line(line)
+    return (
+        line.startswith("```")
+        or _is_quote_line(line)
+        or _is_bullet_line(line)
+        or _parse_heading(line) is not None
+    )
 
 
 def _is_quote_line(line: str) -> bool:
@@ -252,6 +276,13 @@ def _is_bullet_line(line: str) -> bool:
 
 def _strip_bullet(line: str) -> str:
     return re.sub(r"^\s*[-*]\s+", "", line)
+
+
+def _parse_heading(line: str) -> tuple[int, str] | None:
+    match = re.match(r"^\s*(#{1,6})\s+(.+?)\s*$", line)
+    if match is None:
+        return None
+    return len(match.group(1)), match.group(2)
 
 
 def _merge_styles(*styles: str) -> str:

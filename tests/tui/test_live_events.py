@@ -125,3 +125,33 @@ def test_live_markdown_events_render_without_raw_fences(fake_runtime, fake_proje
             assert "```" not in timeline_text
 
     asyncio.run(run())
+
+
+def test_timeline_arrow_keys_scroll_multiple_lines_when_focused(fake_runtime, fake_project):
+    async def run():
+        session = fake_runtime["context"].open({"id": "session-a"})
+        long_block = "\n".join(f"line {index}" for index in range(220))
+        session.events = [
+            {"type": "message_committed", "role": "assistant", "text": long_block},
+        ]
+
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(80, 20)) as pilot:
+            app.load_session("session-a")
+            await pilot.pause()
+
+            timeline_scroll = app.query_one("#timeline-scroll")
+            timeline_scroll.scroll_to(y=0, animate=False, immediate=True)
+            await pilot.pause()
+
+            await app.run_action("focus_timeline")
+            await pilot.pause()
+            assert timeline_scroll.has_focus is True
+
+            start_scroll_y = timeline_scroll.scroll_y
+            await pilot.press("down")
+            await pilot.pause()
+
+            assert timeline_scroll.scroll_y >= start_scroll_y + 3
+
+    asyncio.run(run())

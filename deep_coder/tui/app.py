@@ -65,6 +65,21 @@ class Composer(TextArea):
 
 class TimelineScroll(VerticalScroll):
     can_focus = True
+    LINE_SCROLL_STEP = 4
+
+    def action_scroll_down(self) -> None:
+        self.scroll_to(
+            y=self.scroll_target_y + self.LINE_SCROLL_STEP,
+            animate=False,
+            immediate=True,
+        )
+
+    def action_scroll_up(self) -> None:
+        self.scroll_to(
+            y=self.scroll_target_y - self.LINE_SCROLL_STEP,
+            animate=False,
+            immediate=True,
+        )
 
 
 class StatusStrip(Static):

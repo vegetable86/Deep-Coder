@@ -22,5 +22,5 @@ def resolve_launch_context(
 
 def main() -> int:
     project, runtime = resolve_launch_context()
-    DeepCodeApp(runtime=runtime, project=project).run()
+    DeepCodeApp(runtime=runtime, project=project).run(mouse=False)
     return 0

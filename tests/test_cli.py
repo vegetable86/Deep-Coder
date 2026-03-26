@@ -1,3 +1,4 @@
+import deep_coder.cli as cli_module
 from deep_coder.cli import resolve_launch_context
 from deep_coder.projects.registry import ProjectRegistry
 
@@ -33,3 +34,30 @@ def test_cli_loads_default_model_from_registry(monkeypatch, tmp_path):
     assert project.path == workspace.resolve()
     assert runtime["config"].model_name == "deepseek-reasoner"
     assert runtime["registry"].default_model() == "deepseek-reasoner"
+
+
+def test_main_runs_app_with_mouse_disabled(monkeypatch):
+    run_calls = []
+
+    class FakeApp:
+        def __init__(self, runtime, project):
+            self.runtime = runtime
+            self.project = project
+
+        def run(self, **kwargs):
+            run_calls.append(kwargs)
+
+    fake_project = object()
+    fake_runtime = {"config": object()}
+
+    monkeypatch.setattr(
+        cli_module,
+        "resolve_launch_context",
+        lambda: (fake_project, fake_runtime),
+    )
+    monkeypatch.setattr(cli_module, "DeepCodeApp", FakeApp)
+
+    result = cli_module.main()
+
+    assert result == 0
+    assert run_calls == [{"mouse": False}]

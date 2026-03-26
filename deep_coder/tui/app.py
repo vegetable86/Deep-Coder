@@ -214,8 +214,9 @@ class DeepCodeApp(App):
         elif event_type == "turn_finished":
             self._turn_state = "idle"
 
+        follow_tail = self._timeline_is_at_end()
         self._append_event_block(event)
-        self._refresh_timeline()
+        self._refresh_timeline(follow_tail=follow_tail)
         self._update_status_strip()
 
     def _append_event_block(self, event: dict) -> None:
@@ -234,13 +235,23 @@ class DeepCodeApp(App):
             return
         self._timeline_blocks.append(block)
 
-    def _refresh_timeline(self) -> None:
+    def _refresh_timeline(self, *, follow_tail: bool = False) -> None:
         timeline = Text()
         for index, block in enumerate(self._timeline_blocks):
             if index:
                 timeline.append("\n\n")
             timeline.append_text(block)
         self.query_one("#timeline", Static).update(timeline)
+        if follow_tail:
+            self.query_one("#timeline-scroll", VerticalScroll).scroll_end(
+                animate=False,
+                x_axis=False,
+            )
+
+    def _timeline_is_at_end(self) -> bool:
+        if not self.is_mounted:
+            return False
+        return self.query_one("#timeline-scroll", VerticalScroll).is_vertical_scroll_end
 
     def _update_status_strip(self) -> None:
         parts = [

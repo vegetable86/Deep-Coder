@@ -14,6 +14,10 @@ class RuntimeConfig:
     project_path: Path
     project_key: str
     project_name: str
+    context_recent_turns: int
+    context_working_token_budget: int
+    context_compact_threshold: int
+    context_summary_max_tokens: int
 
     @classmethod
     def from_env(
@@ -34,6 +38,10 @@ class RuntimeConfig:
             project_path=workdir,
             project_key="default",
             project_name=workdir.name or "workspace",
+            context_recent_turns=3,
+            context_working_token_budget=6000,
+            context_compact_threshold=4500,
+            context_summary_max_tokens=1200,
         )
 
     @classmethod
@@ -48,4 +56,8 @@ class RuntimeConfig:
             project_path=project.path,
             project_key=project.key,
             project_name=project.name,
+            context_recent_turns=3,
+            context_working_token_budget=6000,
+            context_compact_threshold=4500,
+            context_summary_max_tokens=1200,
         )

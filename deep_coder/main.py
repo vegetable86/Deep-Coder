@@ -19,15 +19,21 @@ def build_runtime(
     state_dir: Path | None = None,
     project: ProjectRecord | None = None,
     model_name: str | None = None,
+    context_settings: dict | None = None,
     registry=None,
 ) -> dict:
     if project is not None:
-        config = RuntimeConfig.from_project(project, model_name=model_name)
+        config = RuntimeConfig.from_project(
+            project,
+            model_name=model_name,
+            context_settings=context_settings,
+        )
     else:
         config = RuntimeConfig.from_env(
             workdir=workdir,
             state_dir=state_dir,
             model_name=model_name,
+            context_settings=context_settings,
         )
     model = DeepSeekModel(config=config)
     tools = ToolRegistry.from_builtin(config=config, workdir=config.workdir)

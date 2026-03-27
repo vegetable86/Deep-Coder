@@ -147,6 +147,9 @@ class ContextManager:
     def record_summary(self, session, summary: dict) -> None:
         session.summaries.append(summary)
 
+    def should_compact(self, session, usage: dict | None = None) -> bool:
+        return self.strategy.should_compact(session, usage=usage)
+
     def maybe_compact(self, session, usage: dict | None = None) -> bool:
         return self.strategy.maybe_compact(session, usage=usage)
 

@@ -160,6 +160,54 @@ def test_live_task_snapshot_event_renders_inline_in_timeline(fake_runtime, fake_
     asyncio.run(run())
 
 
+def test_live_context_compaction_events_render_inline_and_pulse_status(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "context_compacting",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                }
+            )
+            await asyncio.sleep(0)
+
+            status_strip = app.query_one("#status-strip")
+            status_text = render_widget_text(status_strip)
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "compacting context" in timeline_text.lower()
+            assert "compacting" in status_text.lower()
+            assert status_strip.has_class("busy") is True
+
+            app.emit(
+                {
+                    "type": "context_compacted",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                }
+            )
+            app.emit(
+                {
+                    "type": "turn_finished",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "finish_reason": "stop",
+                }
+            )
+            await asyncio.sleep(0)
+
+            status_text = render_widget_text(app.query_one("#status-strip"))
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "context compacted" in timeline_text.lower()
+            assert "idle" in status_text.lower()
+
+    asyncio.run(run())
+
+
 def test_interrupted_turn_renders_marker_without_final_assistant_message(
     fake_runtime,
     fake_project,

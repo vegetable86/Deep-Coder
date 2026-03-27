@@ -70,6 +70,21 @@ def render_turn_interrupted_block(event: dict) -> RenderableType:
     )
 
 
+def render_context_compaction_block(event: dict) -> RenderableType:
+    if event["type"] == "context_compacting":
+        text = Text("Compacting context...", style="bold yellow")
+        border_style = "yellow"
+    else:
+        text = Text("Context compacted", style="bold cyan")
+        border_style = "cyan"
+    return Panel(
+        text,
+        border_style=border_style,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def render_diff_block(path: str, diff_text: str) -> Text:
     block = Text(f"{path}\n", style="bold")
     old_line = None

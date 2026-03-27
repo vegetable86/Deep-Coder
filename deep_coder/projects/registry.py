@@ -5,6 +5,14 @@ from pathlib import Path
 import re
 
 
+CONTEXT_SETTING_KEYS = (
+    "context_recent_turns",
+    "context_working_token_budget",
+    "context_compact_threshold",
+    "context_summary_max_tokens",
+)
+
+
 @dataclass(frozen=True)
 class ProjectRecord:
     path: Path
@@ -26,6 +34,21 @@ class ProjectRegistry:
     def set_default_model(self, model_name: str) -> None:
         data = self._load()
         data["default_model"] = model_name
+        self._save(data)
+
+    def context_settings(self) -> dict[str, int]:
+        data = self._load()
+        return {
+            key: data[key]
+            for key in CONTEXT_SETTING_KEYS
+            if key in data
+        }
+
+    def set_context_settings(self, settings: dict[str, int]) -> None:
+        data = self._load()
+        for key in CONTEXT_SETTING_KEYS:
+            if key in settings:
+                data[key] = int(settings[key])
         self._save(data)
 
     def open_workspace(self, workspace: Path) -> ProjectRecord:
@@ -52,6 +75,7 @@ class ProjectRegistry:
         data = {"projects": []}
         current_project = None
         default_model = None
+        context_settings = {}
         project = None
 
         for raw_line in self.config_path.read_text().splitlines():
@@ -72,11 +96,14 @@ class ProjectRegistry:
                 current_project = value
             elif key == "default_model":
                 default_model = value
+            elif key in CONTEXT_SETTING_KEYS:
+                context_settings[key] = int(value)
 
         if current_project:
             data["current_project"] = current_project
         if default_model:
             data["default_model"] = default_model
+        data.update(context_settings)
         return data
 
     def _save(self, data: dict) -> None:
@@ -90,6 +117,10 @@ class ProjectRegistry:
         default_model = data.get("default_model")
         if default_model:
             lines.append(f'default_model = "{self._escape(default_model)}"')
+        for key in CONTEXT_SETTING_KEYS:
+            value = data.get(key)
+            if value is not None:
+                lines.append(f"{key} = {int(value)}")
 
         for project in data.get("projects", []):
             lines.extend(

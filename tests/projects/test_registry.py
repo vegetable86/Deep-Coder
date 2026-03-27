@@ -39,3 +39,26 @@ def test_registry_round_trips_default_model(tmp_path):
     reloaded = ProjectRegistry(root=root)
 
     assert reloaded.default_model() == "deepseek-reasoner"
+
+
+def test_registry_round_trips_global_context_settings(tmp_path):
+    root = tmp_path / ".deepcode"
+    registry = ProjectRegistry(root=root)
+
+    registry.set_context_settings(
+        {
+            "context_recent_turns": 5,
+            "context_working_token_budget": 7000,
+            "context_compact_threshold": 3200,
+            "context_summary_max_tokens": 900,
+        }
+    )
+
+    reloaded = ProjectRegistry(root=root)
+
+    assert reloaded.context_settings() == {
+        "context_recent_turns": 5,
+        "context_working_token_budget": 7000,
+        "context_compact_threshold": 3200,
+        "context_summary_max_tokens": 900,
+    }

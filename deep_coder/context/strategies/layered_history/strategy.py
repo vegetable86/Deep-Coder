@@ -30,14 +30,17 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
     def record_event(self, session, event: dict) -> None:
         session.append(event)
 
-    def maybe_compact(self, session, usage: dict | None = None) -> bool:
+    def should_compact(self, session, usage: dict | None = None) -> bool:
         if not usage:
             return False
         if usage.get("prompt_tokens", 0) <= self.config.context_compact_threshold:
             return False
-        candidates = self._summarizable_entries(session)
-        if not candidates:
+        return bool(self._summarizable_entries(session))
+
+    def maybe_compact(self, session, usage: dict | None = None) -> bool:
+        if not self.should_compact(session, usage=usage):
             return False
+        candidates = self._summarizable_entries(session)
         summary_payload = dict(self.summarizer.summarize_span(session, candidates))
         summary_id = summary_payload.pop("summary_id", None) or self._next_id("sum")
         covered_event_ids = [entry["event_id"] for entry in candidates]

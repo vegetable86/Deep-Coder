@@ -14,6 +14,7 @@ from deep_coder.harness import start_turn_subprocess
 from deep_coder.tui.commands import CommandRegistry
 from deep_coder.tui.commands.parser import parse_command_text
 from deep_coder.tui.render import (
+    render_context_compaction_block,
     render_diff_block,
     render_message_block,
     render_task_snapshot_block,
@@ -138,7 +139,7 @@ class StatusStrip(Static):
 
     def _sync_busy_state(self) -> None:
         is_busy = (
-            self._turn_state in {"running", "interrupting"}
+            self._turn_state in {"running", "interrupting", "compacting"}
             or self._turn_state.startswith("tool:")
         )
         self.set_class(is_busy, "busy")
@@ -428,6 +429,10 @@ class DeepCodeApp(App):
             self._turn_state = "running"
         elif event_type == "tool_called" and self._turn_state != "interrupting":
             self._turn_state = f"tool:{event['name']}"
+        elif event_type == "context_compacting" and self._turn_state != "interrupting":
+            self._turn_state = "compacting"
+        elif event_type == "context_compacted" and self._turn_state == "compacting":
+            self._turn_state = "running"
         elif event_type in {"turn_finished", "turn_interrupted"}:
             self._turn_state = "idle"
 
@@ -452,6 +457,8 @@ class DeepCodeApp(App):
             block = render_task_snapshot_block(event)
         elif event_type == "turn_interrupted":
             block = render_turn_interrupted_block(event)
+        elif event_type in {"context_compacting", "context_compacted"}:
+            block = render_context_compaction_block(event)
         else:
             return
         self._timeline_blocks.append(block)

@@ -22,6 +22,10 @@ class ContextStrategyBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def should_compact(self, session, usage: dict | None = None) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     def maybe_compact(self, session, usage: dict | None = None) -> bool:
         raise NotImplementedError
 

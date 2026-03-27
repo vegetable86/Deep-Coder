@@ -36,6 +36,33 @@ def test_cli_loads_default_model_from_registry(monkeypatch, tmp_path):
     assert runtime["registry"].default_model() == "deepseek-reasoner"
 
 
+def test_cli_loads_global_context_settings_from_registry(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    registry_root = tmp_path / ".deepcode"
+    registry = ProjectRegistry(root=registry_root)
+    registry.set_context_settings(
+        {
+            "context_recent_turns": 5,
+            "context_working_token_budget": 7000,
+            "context_compact_threshold": 3200,
+            "context_summary_max_tokens": 900,
+        }
+    )
+
+    project, runtime = resolve_launch_context(
+        cwd=workspace,
+        registry_root=registry_root,
+    )
+
+    assert project.path == workspace.resolve()
+    assert runtime["config"].context_recent_turns == 5
+    assert runtime["config"].context_working_token_budget == 7000
+    assert runtime["config"].context_compact_threshold == 3200
+    assert runtime["config"].context_summary_max_tokens == 900
+
+
 def test_main_runs_app_with_mouse_disabled(monkeypatch):
     run_calls = []
 

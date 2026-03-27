@@ -569,6 +569,15 @@ def test_harness_triggers_compaction_after_large_prompt_usage(tmp_path):
     )
     reopened = context.open(locator={"id": result.session_id})
 
+    assert [event["type"] for event in events] == [
+        "turn_started",
+        "message_committed",
+        "usage_reported",
+        "context_compacting",
+        "context_compacted",
+        "message_committed",
+        "turn_finished",
+    ]
     assert any(event["type"] == "context_compacted" for event in events)
     assert reopened.summaries[-1]["covered_event_ids"] == [
         reopened.journal[0]["event_id"],

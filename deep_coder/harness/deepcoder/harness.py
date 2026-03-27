@@ -71,6 +71,12 @@ class DeepCoderHarness(HarnessBase):
                     event_sink,
                     self._event(session, turn_id, "usage_reported", **response["usage"]),
                 )
+                if self.context.should_compact(session, usage=response["usage"]):
+                    self._publish(
+                        session,
+                        event_sink,
+                        self._event(session, turn_id, "context_compacting"),
+                    )
                 if self.context.maybe_compact(session, usage=response["usage"]):
                     self._publish(
                         session,

@@ -3,6 +3,14 @@ import os
 from pathlib import Path
 
 
+DEFAULT_CONTEXT_SETTINGS = {
+    "context_recent_turns": 3,
+    "context_working_token_budget": 6000,
+    "context_compact_threshold": 4500,
+    "context_summary_max_tokens": 1200,
+}
+
+
 @dataclass
 class RuntimeConfig:
     model_provider: str
@@ -25,9 +33,11 @@ class RuntimeConfig:
         workdir: Path | None = None,
         state_dir: Path | None = None,
         model_name: str | None = None,
+        context_settings: dict | None = None,
     ):
         workdir = (workdir or Path.cwd()).resolve()
         state_dir = state_dir or (Path.home() / ".deepcode")
+        context_values = _resolve_context_settings(context_settings)
         return cls(
             model_provider="deepseek",
             model_name=model_name or "deepseek-chat",
@@ -38,14 +48,20 @@ class RuntimeConfig:
             project_path=workdir,
             project_key="default",
             project_name=workdir.name or "workspace",
-            context_recent_turns=3,
-            context_working_token_budget=6000,
-            context_compact_threshold=4500,
-            context_summary_max_tokens=1200,
+            context_recent_turns=context_values["context_recent_turns"],
+            context_working_token_budget=context_values["context_working_token_budget"],
+            context_compact_threshold=context_values["context_compact_threshold"],
+            context_summary_max_tokens=context_values["context_summary_max_tokens"],
         )
 
     @classmethod
-    def from_project(cls, project, model_name: str | None = None):
+    def from_project(
+        cls,
+        project,
+        model_name: str | None = None,
+        context_settings: dict | None = None,
+    ):
+        context_values = _resolve_context_settings(context_settings)
         return cls(
             model_provider="deepseek",
             model_name=model_name or "deepseek-chat",
@@ -56,8 +72,18 @@ class RuntimeConfig:
             project_path=project.path,
             project_key=project.key,
             project_name=project.name,
-            context_recent_turns=3,
-            context_working_token_budget=6000,
-            context_compact_threshold=4500,
-            context_summary_max_tokens=1200,
+            context_recent_turns=context_values["context_recent_turns"],
+            context_working_token_budget=context_values["context_working_token_budget"],
+            context_compact_threshold=context_values["context_compact_threshold"],
+            context_summary_max_tokens=context_values["context_summary_max_tokens"],
         )
+
+
+def _resolve_context_settings(context_settings: dict | None) -> dict[str, int]:
+    values = dict(DEFAULT_CONTEXT_SETTINGS)
+    if not context_settings:
+        return values
+    for key in DEFAULT_CONTEXT_SETTINGS:
+        if key in context_settings and context_settings[key] is not None:
+            values[key] = int(context_settings[key])
+    return values

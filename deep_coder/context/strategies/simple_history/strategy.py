@@ -16,6 +16,9 @@ class SimpleHistoryContextStrategy(ContextStrategyBase):
     def record_event(self, session, event: dict) -> None:
         session.append(event)
 
+    def should_compact(self, session, usage: dict | None = None) -> bool:
+        return False
+
     def maybe_compact(self, session, usage: dict | None = None) -> bool:
         return False
 

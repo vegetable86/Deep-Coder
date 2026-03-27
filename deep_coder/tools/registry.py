@@ -8,6 +8,7 @@ from deep_coder.tools.history_search.tool import HistorySearchTool
 from deep_coder.tools.read_file.tool import ReadFileTool
 from deep_coder.tools.read_file.tool import _safe_path
 from deep_coder.tools.result import ToolExecutionResult
+from deep_coder.tools.skills.tool import SkillLoadTool
 from deep_coder.tools.tasks.tool import (
     TaskCreateTool,
     TaskGetTool,
@@ -36,6 +37,7 @@ class ToolRegistry:
                 TaskGetTool(config=config, workdir=workdir),
                 HistorySearchTool(config=config, workdir=workdir),
                 HistoryLoadTool(config=config, workdir=workdir),
+                SkillLoadTool(config=config, workdir=workdir),
             ],
             workdir=workdir,
         )

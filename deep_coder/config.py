@@ -27,6 +27,10 @@ class RuntimeConfig:
     context_compact_threshold: int
     context_summary_max_tokens: int
 
+    @property
+    def skills_dir(self) -> Path:
+        return self.state_dir / "skills"
+
     @classmethod
     def from_env(
         cls,

@@ -122,6 +122,7 @@ class FileSystemSessionStore(SessionStoreBase):
             workspace_path=workspace_path,
             strategy_name=strategy_name,
             strategy_state=strategy_state,
+            active_skills=meta.get("active_skills", []) if meta_path.exists() else [],
         )
 
     def save(self, session) -> None:

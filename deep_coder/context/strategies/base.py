@@ -2,11 +2,16 @@ from abc import ABC, abstractmethod
 
 
 class ContextStrategyBase(ABC):
-    def prepare_messages(self, session, system_prompt: str, user_input: str) -> list[dict]:
-        return [
-            {"role": "system", "content": system_prompt},
-            *self.build_working_set(session, system_prompt, user_input),
-        ]
+    def prepare_messages(self, session, system_prompt: str, user_input: str, skill_index: str = "", active_skill_bodies: str = "") -> list[dict]:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if skill_index:
+            messages.append({"role": "system", "content": skill_index})
+        if active_skill_bodies:
+            messages.append({"role": "system", "content": active_skill_bodies})
+        messages.extend(self.build_working_set(session, system_prompt, user_input))
+        return messages
 
     @abstractmethod
     def build_working_set(

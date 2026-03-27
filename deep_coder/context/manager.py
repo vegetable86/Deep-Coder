@@ -17,8 +17,8 @@ class ContextManager:
     def open(self, locator: dict | None = None):
         return self.store.open(locator=locator)
 
-    def prepare_messages(self, session, system_prompt: str, user_input: str) -> list[dict]:
-        return self.strategy.prepare_messages(session, system_prompt, user_input)
+    def prepare_messages(self, session, system_prompt: str, user_input: str, skill_index: str = "", active_skill_bodies: str = "") -> list[dict]:
+        return self.strategy.prepare_messages(session, system_prompt, user_input, skill_index, active_skill_bodies)
 
     def record_event(self, session, event: dict) -> None:
         self.strategy.record_event(session, event)

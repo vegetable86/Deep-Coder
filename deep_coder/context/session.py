@@ -31,6 +31,7 @@ class Session:
     workspace_path: str | None = None
     strategy_name: str = "simple_history"
     strategy_state: dict = field(default_factory=dict)
+    active_skills: list[dict] = field(default_factory=list)
 
     def append(self, event: dict) -> None:
         self.messages.append(event)
@@ -40,6 +41,7 @@ class Session:
             "id": self.session_id,
             "project_key": self.project_key,
             "workspace_path": self.workspace_path,
+            "active_skills": self.active_skills,
         }
         preview = derive_session_preview(self.messages)
         if preview:

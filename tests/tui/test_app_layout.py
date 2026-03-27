@@ -184,6 +184,38 @@ def test_skills_command_creates_session_and_activates_skill(fake_runtime, fake_p
     asyncio.run(run())
 
 
+def test_skills_command_opens_skill_list_modal(fake_runtime, fake_project):
+    async def run():
+        (fake_runtime["config"].skills_dir / "javascript-tests.md").write_text(
+            "---\n"
+            "name: javascript-tests\n"
+            "title: JavaScript Test Fixing\n"
+            "summary: Use when diagnosing jest failures.\n"
+            "---\n\n"
+            "Skill body.\n"
+        )
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "/skills use python-tests"
+            await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            composer.text = "/skills"
+            await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+
+            overlay = app.screen.query_one("#skill-list")
+            labels = [option.prompt for option in overlay.options]
+            assert labels == [
+                "- javascript-tests  JavaScript Test Fixing  Use when diagnosing jest failures.",
+                "* python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+            ]
+
+    asyncio.run(run())
+
+
 def test_interrupt_action_transitions_status_from_running_to_idle(
     fake_runtime,
     fake_project,

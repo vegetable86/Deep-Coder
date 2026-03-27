@@ -135,6 +135,22 @@ def test_skills_command_activates_skill_for_session(fake_runtime, fake_project):
 
 def test_skills_command_lists_available_skills(fake_runtime, fake_project):
     registry = CommandRegistry.with_builtin_commands()
+    (fake_runtime["config"].skills_dir / "javascript-tests.md").write_text(
+        "---\n"
+        "name: javascript-tests\n"
+        "title: JavaScript Test Fixing\n"
+        "summary: Use when diagnosing jest failures.\n"
+        "---\n\n"
+        "Skill body.\n"
+    )
+
+    registry.execute(
+        "/skills use python-tests",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
 
     result = registry.execute(
         "/skills",
@@ -144,4 +160,9 @@ def test_skills_command_lists_available_skills(fake_runtime, fake_project):
         turn_state="idle",
     )
 
-    assert "python-tests" in result.status_message
+    assert result.list_kind == "skills"
+    assert result.status_message is None
+    assert [(item["name"], item["is_active"]) for item in result.list_items] == [
+        ("javascript-tests", False),
+        ("python-tests", True),
+    ]

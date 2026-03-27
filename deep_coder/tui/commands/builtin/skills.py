@@ -35,15 +35,17 @@ class SkillsCommand(CommandBase):
                     status_message=f"Failed to list skills: {e}",
                 )
 
-            if not skills:
-                return CommandResult(status_message="skills: none")
-
-            items = []
-            for skill in skills:
-                marker = "*" if skill.name in active_names else "-"
-                items.append(f"{marker}{skill.name}")
             return CommandResult(
-                status_message="skills: " + ", ".join(items),
+                list_items=[
+                    {
+                        "name": skill.name,
+                        "title": skill.title,
+                        "summary": skill.summary,
+                        "is_active": skill.name in active_names,
+                    }
+                    for skill in skills
+                ],
+                list_kind="skills",
             )
 
         if subcommand in {"use", "activate"}:

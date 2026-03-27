@@ -25,6 +25,7 @@ from deep_coder.tui.render import (
     render_usage_block,
 )
 from deep_coder.tui.screens.command_palette import CommandPalette
+from deep_coder.tui.screens.skill_list import SkillListScreen
 from deep_coder.tui.screens.session_switcher import SessionSwitcher
 
 
@@ -499,6 +500,8 @@ class DeepCodeApp(App):
         self._command_feedback = result.warning_message or result.status_message or ""
         if result.list_kind == "sessions":
             self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
+        if result.list_kind == "skills":
+            self.push_screen(SkillListScreen(result.list_items))
         if result.selected_session_id is not None:
             self.session_id = result.selected_session_id
         if result.reset_session:

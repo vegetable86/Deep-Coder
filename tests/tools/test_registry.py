@@ -19,6 +19,8 @@ def test_registry_returns_builtin_tool_schemas(tmp_path, monkeypatch):
         "task_update",
         "task_list",
         "task_get",
+        "search_history",
+        "load_history_artifacts",
     ]
 
 

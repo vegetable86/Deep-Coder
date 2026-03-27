@@ -3,6 +3,8 @@ from pathlib import Path
 
 from deep_coder.tools.bash.tool import BashTool
 from deep_coder.tools.edit_file.tool import EditFileTool
+from deep_coder.tools.history_load.tool import HistoryLoadTool
+from deep_coder.tools.history_search.tool import HistorySearchTool
 from deep_coder.tools.read_file.tool import ReadFileTool
 from deep_coder.tools.read_file.tool import _safe_path
 from deep_coder.tools.result import ToolExecutionResult
@@ -32,6 +34,8 @@ class ToolRegistry:
                 TaskUpdateTool(config=config, workdir=workdir),
                 TaskListTool(config=config, workdir=workdir),
                 TaskGetTool(config=config, workdir=workdir),
+                HistorySearchTool(config=config, workdir=workdir),
+                HistoryLoadTool(config=config, workdir=workdir),
             ],
             workdir=workdir,
         )

@@ -116,7 +116,7 @@ It is responsible for:
 
 - session persistence
 - session listing
-- message history assembly
+- layered history assembly
 - runtime context-window control
 - algorithm-specific compaction or abstraction
 
@@ -124,6 +124,14 @@ To avoid hardcoding one storage or compaction style, the context layer is split 
 
 - `SessionStoreBase`
 - `ContextStrategyBase`
+
+The current layered strategy persists three linked views of a session:
+
+- journal metadata for chronological retrieval
+- exact evidence payloads and artifact blobs
+- structured summaries with provenance back to journal and evidence ids
+
+Prompt assembly now uses the rolling summary plus recent verbatim turns instead of replaying the full raw transcript on every request.
 
 ## Base-Class Contracts
 
@@ -331,10 +339,10 @@ The v1 loop is:
 1. CLI receives user input
 2. Harness opens the selected session through `ContextManager`
 3. Prompt module renders the active system prompt
-4. Context strategy builds request messages
+4. Context strategy builds request messages from the rolling summary plus recent turns
 5. Harness asks `ToolRegistry` for all tool schemas
 6. Harness calls `DeepSeekModel`
-7. If the model emits tool calls, harness executes the requested tools
+7. If the model emits tool calls, harness executes the requested tools, including summary-first history retrieval tools when the model needs more context
 8. Harness records tool events through `ContextManager`
 9. Harness repeats until the model returns a final answer
 10. Harness flushes the session to persistent storage
@@ -406,10 +414,12 @@ Version 1 should start with:
 - `DeepSeekModel`
 - `DeepCoderPrompt`
 - `FileSystemSessionStore`
-- `RollingWindowContextStrategy`
+- `LayeredHistoryContextStrategy`
 - `BashTool`
 - `ReadFileTool`
 - `WriteFileTool`
 - `EditFileTool`
+- `HistorySearchTool`
+- `HistoryLoadTool`
 
 This is the minimum shape that turns the prototype into a clean, extensible architecture.

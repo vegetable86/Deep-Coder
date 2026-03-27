@@ -11,7 +11,6 @@
 **Execution Notes:** Follow `@test-driven-development` and `@verification-before-completion`. Use `/home/wys/deep-code/.venv/bin/pytest -q` for verification in this repository. Before implementation, create a dedicated worktree under `.worktrees/`, for example `git worktree add -b feat/layered-context .worktrees/feat/layered-context HEAD`.
 
 **Implementation Status (2026-03-27):** Tasks 1 through 7 are implemented on `feat/layered-context`. The runtime now persists journal, evidence, summaries, and artifacts; uses `LayeredHistoryContextStrategy` by default; triggers compaction from model usage; and exposes `search_history` plus `load_history_artifacts` for summary-first recall.
-
 **Architecture Diagram:**
 
 ```mermaid

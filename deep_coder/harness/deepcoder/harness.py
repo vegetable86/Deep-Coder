@@ -46,7 +46,11 @@ class DeepCoderHarness(HarnessBase):
             )
             messages = self.context.prepare_messages(session, system_prompt, current_input)
             if current_input is not None:
-                self.context.record_event(session, {"role": "user", "content": current_input})
+                self.context.record_user_message(
+                    session,
+                    turn_id=turn_id,
+                    text=current_input,
+                )
                 self._publish(
                     session,
                     event_sink,
@@ -67,15 +71,19 @@ class DeepCoderHarness(HarnessBase):
                     event_sink,
                     self._event(session, turn_id, "usage_reported", **response["usage"]),
                 )
+                if self.context.maybe_compact(session, usage=response["usage"]):
+                    self._publish(
+                        session,
+                        event_sink,
+                        self._event(session, turn_id, "context_compacted"),
+                    )
 
             if response["tool_calls"]:
-                self.context.record_event(
+                self.context.record_assistant_message(
                     session,
-                    {
-                        "role": "assistant",
-                        "content": response["content"] or "",
-                        "tool_calls": response["tool_calls"],
-                    },
+                    turn_id=turn_id,
+                    text=response["content"] or "",
+                    tool_calls=response["tool_calls"],
                 )
                 self.context.flush(session)
                 for tool_call in response["tool_calls"]:
@@ -98,13 +106,11 @@ class DeepCoderHarness(HarnessBase):
                             arguments=tool_call["arguments"],
                         ),
                     )
-                    self.context.record_event(
+                    self.context.record_tool_result(
                         session,
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call["id"],
-                            "content": output.model_output,
-                        },
+                        turn_id=turn_id,
+                        tool_call=tool_call,
+                        output=output,
                     )
                     self._publish(
                         session,
@@ -147,9 +153,10 @@ class DeepCoderHarness(HarnessBase):
                 continue
 
             assistant_text = response["content"] or ""
-            self.context.record_event(
+            self.context.record_assistant_message(
                 session,
-                {"role": "assistant", "content": assistant_text},
+                turn_id=turn_id,
+                text=assistant_text,
             )
             self._publish(
                 session,

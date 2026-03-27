@@ -3,6 +3,9 @@ from types import SimpleNamespace
 
 from deep_coder.context.manager import ContextManager
 from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
+from deep_coder.context.strategies.layered_history.strategy import (
+    LayeredHistoryContextStrategy,
+)
 from deep_coder.context.strategies.simple_history.strategy import (
     SimpleHistoryContextStrategy,
 )
@@ -422,3 +425,152 @@ def test_harness_flushes_completed_tool_results_before_later_tool_finishes(tmp_p
     assert not thread_errors
     assert worker.is_alive() is False
     assert result_holder["result"].final_text == "done"
+
+
+def test_harness_records_tool_calls_and_results_into_layered_context(tmp_path):
+    class FakeSummarizer:
+        def summarize_span(self, session, entries: list[dict]) -> dict:
+            return {"goal": "summarized history"}
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "read_file",
+                            "arguments": {"path": "README.md"},
+                        }
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return [{"function": {"name": "read_file"}}]
+
+        def execute(self, name, arguments, session=None):
+            return ToolExecutionResult(
+                name=name,
+                display_command="read_file README.md",
+                model_output="file contents",
+                output_text="file contents",
+            )
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=LayeredHistoryContextStrategy(
+            config=SimpleNamespace(
+                context_recent_turns=2,
+                context_compact_threshold=4500,
+                context_summary_max_tokens=1200,
+            ),
+            summarizer=FakeSummarizer(),
+        ),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    result = harness.run(session_locator=None, user_input="read README")
+    reopened = context.open(locator={"id": result.session_id})
+
+    assert [entry["kind"] for entry in reopened.journal] == [
+        "user_message",
+        "assistant_tool_call",
+        "tool_result",
+        "assistant_message",
+    ]
+    assert reopened.evidence[2]["content"] == "file contents"
+
+
+def test_harness_triggers_compaction_after_large_prompt_usage(tmp_path):
+    events = []
+
+    class FakeSummarizer:
+        def summarize_span(self, session, entries: list[dict]) -> dict:
+            return {
+                "goal": "inspect repo",
+                "open_questions": ["next step"],
+            }
+
+    class CapturingSink:
+        def emit(self, event):
+            events.append(event)
+
+    class FakeModel:
+        def complete(self, request):
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": {
+                    "prompt_tokens": 9000,
+                    "completion_tokens": 10,
+                    "total_tokens": 9010,
+                    "cache_hit_tokens": 0,
+                    "cache_miss_tokens": 9000,
+                },
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return []
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=LayeredHistoryContextStrategy(
+            config=SimpleNamespace(
+                context_recent_turns=1,
+                context_compact_threshold=4500,
+                context_summary_max_tokens=1200,
+            ),
+            summarizer=FakeSummarizer(),
+        ),
+    )
+    session = context.open(locator={"id": "session-a"})
+    context.record_user_message(session, turn_id="turn-1", text="inspect repository")
+    context.record_assistant_message(session, turn_id="turn-1", text="look at cli.py")
+    context.flush(session)
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    result = harness.run(
+        session_locator={"id": "session-a"},
+        user_input="continue",
+        event_sink=CapturingSink(),
+    )
+    reopened = context.open(locator={"id": result.session_id})
+
+    assert any(event["type"] == "context_compacted" for event in events)
+    assert reopened.summaries[-1]["covered_event_ids"] == [
+        reopened.journal[0]["event_id"],
+        reopened.journal[1]["event_id"],
+    ]

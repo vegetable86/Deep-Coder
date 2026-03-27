@@ -39,7 +39,7 @@ def test_slash_opens_command_palette_and_filters_matches(fake_runtime, fake_proj
             await app.run_action("refresh_command_palette")
             palette = app.query_one("#command-palette")
             labels = [option.prompt for option in palette.options]
-            assert labels == ["/exit", "/history", "/model", "/session"]
+            assert labels == ["/exit", "/history", "/model", "/session", "/skills"]
 
             composer.text = "/hi"
             await app.run_action("refresh_command_palette")
@@ -70,7 +70,7 @@ def test_typing_slash_opens_command_palette(fake_runtime, fake_project):
             await pilot.pause()
             palette = app.query_one("#command-palette")
             labels = [option.prompt for option in palette.options]
-            assert labels == ["/exit", "/history", "/model", "/session"]
+            assert labels == ["/exit", "/history", "/model", "/session", "/skills"]
             assert palette.display is True
 
     asyncio.run(run())
@@ -163,6 +163,23 @@ def test_busy_command_shows_warning_in_status_strip(fake_runtime, fake_project):
             await pilot.press("enter")
             status = render_widget_text(app.query_one("#status-strip"))
             assert "system now in runtime, please wait for the work end" in status
+
+    asyncio.run(run())
+
+
+def test_skills_command_creates_session_and_activates_skill(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "/skills use python-tests"
+            await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.session_id is not None
+            session = fake_runtime["context"].open(locator={"id": app.session_id})
+            assert session.active_skills[0]["name"] == "python-tests"
 
     asyncio.run(run())
 

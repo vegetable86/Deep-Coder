@@ -3,6 +3,7 @@ import uuid
 from deep_coder.harness.base import HarnessBase
 from deep_coder.harness.events import NullHarnessEventSink
 from deep_coder.harness.result import HarnessResult
+from deep_coder.skills.registry import SkillRegistry
 
 
 class DeepCoderHarness(HarnessBase):
@@ -44,45 +45,18 @@ class DeepCoderHarness(HarnessBase):
                 session_snapshot=session.meta(),
                 tool_schemas=self.tools.schemas(),
             )
-            # Build skill index and active skill bodies
-            skill_index = ""
-            active_skill_bodies = ""
-            if hasattr(self.config, 'skills_dir'):
-                from deep_coder.skills.registry import SkillRegistry
-                try:
-                    registry = SkillRegistry(root=self.config.skills_dir)
-                    skill_index_lines = []
-                    try:
-                        skills = registry.list_skills()
-                        if skills:
-                            skill_index_lines.append("Available skills:")
-                            for skill in skills:
-                                skill_index_lines.append(f"- {skill.name}: {skill.title} - {skill.summary}")
-                    except Exception:
-                        pass
-                    skill_index = "\n".join(skill_index_lines) if skill_index_lines else ""
-                    
-                    active_skill_bodies_lines = []
-                    if session.active_skills:
-                        active_names = {s["name"] for s in session.active_skills}
-                        for skill_name in active_names:
-                            try:
-                                skill = registry.load_skill(skill_name)
-                                active_skill_bodies_lines.append(f"# Skill: {skill.title} ({skill.name})")
-                                active_skill_bodies_lines.append(skill.body)
-                                active_skill_bodies_lines.append("")
-                            except Exception:
-                                pass
-                    active_skill_bodies = "\n".join(active_skill_bodies_lines) if active_skill_bodies_lines else ""
-                except Exception:
-                    pass
-            
+            skill_index, active_skill_bodies = self._skill_context(
+                session,
+                turn_id=turn_id,
+                event_sink=event_sink,
+            )
+
             messages = self.context.prepare_messages(
-                session, 
-                system_prompt, 
+                session,
+                system_prompt,
                 current_input,
                 skill_index,
-                active_skill_bodies
+                active_skill_bodies,
             )
             if current_input is not None:
                 self.context.record_user_message(
@@ -229,3 +203,40 @@ class DeepCoderHarness(HarnessBase):
                 tool_results=tool_results,
                 session_id=session.session_id,
             )
+
+    def _skill_context(self, session, *, turn_id: str, event_sink) -> tuple[str, str]:
+        if not hasattr(self.config, "skills_dir"):
+            return "", ""
+
+        registry = SkillRegistry(root=self.config.skills_dir)
+        skill_index_lines = []
+        skills = registry.list_skills()
+        if skills:
+            skill_index_lines.append("Available skills:")
+            for skill in skills:
+                skill_index_lines.append(f"- {skill.name}: {skill.title} - {skill.summary}")
+
+        active_skill_bodies_lines = []
+        for active_skill in session.active_skills:
+            try:
+                skill = registry.load_skill(active_skill["name"])
+            except FileNotFoundError:
+                self._publish(
+                    session,
+                    event_sink,
+                    self._event(
+                        session,
+                        turn_id,
+                        "skill_missing",
+                        name=active_skill["name"],
+                    ),
+                )
+                continue
+            active_skill_bodies_lines.append(f"# Skill: {skill.title} ({skill.name})")
+            active_skill_bodies_lines.append(skill.body)
+            active_skill_bodies_lines.append("")
+
+        return (
+            "\n".join(skill_index_lines) if skill_index_lines else "",
+            "\n".join(active_skill_bodies_lines) if active_skill_bodies_lines else "",
+        )

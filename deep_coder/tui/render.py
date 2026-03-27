@@ -85,6 +85,33 @@ def render_context_compaction_block(event: dict) -> RenderableType:
     )
 
 
+def render_skill_event_block(event: dict) -> RenderableType:
+    if event["type"] == "skill_activated":
+        text = Text(
+            f"Skill active: {event['name']}",
+            style="bold cyan",
+        )
+        border_style = "cyan"
+    elif event["type"] == "skill_dropped":
+        text = Text(
+            f"Skill removed: {event['name']}",
+            style="bold yellow",
+        )
+        border_style = "yellow"
+    else:
+        text = Text(
+            f"Skill missing: {event['name']}",
+            style="bold red",
+        )
+        border_style = "red"
+    return Panel(
+        text,
+        border_style=border_style,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def render_diff_block(path: str, diff_text: str) -> Text:
     block = Text(f"{path}\n", style="bold")
     old_line = None

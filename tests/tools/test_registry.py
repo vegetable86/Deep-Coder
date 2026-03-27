@@ -42,3 +42,34 @@ def test_registry_returns_display_command_and_diff_for_edit(tmp_path, monkeypatc
     assert "@@" in result.diff_text
     assert "-hello world" in result.diff_text
     assert "+hello runtime" in result.diff_text
+
+
+def test_registry_executes_load_skill_and_returns_tool_result(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    state_dir = tmp_path / ".deepcode"
+    skills_dir = state_dir / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "python-tests.md").write_text(
+        "---\n"
+        "name: python-tests\n"
+        "title: Python Test Fixing\n"
+        "summary: Use when diagnosing pytest failures.\n"
+        "---\n\n"
+        "Skill body.\n"
+    )
+    registry = ToolRegistry.from_builtin(
+        config=RuntimeConfig.from_env(workdir=tmp_path, state_dir=state_dir),
+        workdir=tmp_path,
+    )
+    session = type("Session", (), {"active_skills": []})()
+
+    result = registry.execute(
+        "load_skill",
+        {"name": "python-tests"},
+        session=session,
+    )
+
+    assert result.name == "load_skill"
+    assert result.is_error is False
+    assert "python-tests" in result.model_output
+    assert session.active_skills[0]["name"] == "python-tests"

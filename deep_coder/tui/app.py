@@ -17,6 +17,7 @@ from deep_coder.tui.render import (
     render_context_compaction_block,
     render_diff_block,
     render_message_block,
+    render_skill_event_block,
     render_task_snapshot_block,
     render_turn_interrupted_block,
     render_tool_call_block,
@@ -459,6 +460,8 @@ class DeepCodeApp(App):
             block = render_turn_interrupted_block(event)
         elif event_type in {"context_compacting", "context_compacted"}:
             block = render_context_compaction_block(event)
+        elif event_type in {"skill_activated", "skill_dropped", "skill_missing"}:
+            block = render_skill_event_block(event)
         else:
             return
         self._timeline_blocks.append(block)
@@ -496,8 +499,12 @@ class DeepCodeApp(App):
         self._command_feedback = result.warning_message or result.status_message or ""
         if result.list_kind == "sessions":
             self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
+        if result.selected_session_id is not None:
+            self.session_id = result.selected_session_id
         if result.reset_session:
             self._reset_session_view()
+        for event in result.timeline_events:
+            self.emit(event)
         if result.should_exit:
             self.exit()
             return

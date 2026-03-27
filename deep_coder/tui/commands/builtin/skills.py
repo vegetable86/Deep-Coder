@@ -5,53 +5,17 @@ from deep_coder.skills.registry import SkillRegistry
 class SkillsCommand(CommandBase):
     name = "skills"
     summary = "List and manage active skills"
-    argument_hint = "[list|activate <name>|deactivate <name>]"
+    argument_hint = "[use <name>|drop <name>|clear|show <name>]"
 
     def complete(self, context, args: str):
         parts = args.strip().split()
         if len(parts) == 0:
-            return [
-                CommandMatch(
-                    name="list",
-                    summary="List available skills",
-                    label="list",
-                    command_text="/skills list",
-                    kind="subcommand",
-                ),
-                CommandMatch(
-                    name="activate",
-                    summary="Activate a skill",
-                    label="activate",
-                    command_text="/skills activate ",
-                    kind="subcommand",
-                ),
-                CommandMatch(
-                    name="deactivate",
-                    summary="Deactivate a skill",
-                    label="deactivate",
-                    command_text="/skills deactivate ",
-                    kind="subcommand",
-                ),
-            ]
-        elif len(parts) == 1:
+            return _subcommand_matches(prefix="")
+        if len(parts) == 1:
             subcommand = parts[0]
-            if subcommand in ["activate", "deactivate"]:
-                config = context.runtime["config"]
-                registry = SkillRegistry(root=config.skills_dir)
-                try:
-                    skills = registry.list_skills()
-                except Exception:
-                    skills = []
-                return [
-                    CommandMatch(
-                        name=skill.name,
-                        summary=skill.summary,
-                        label=skill.name,
-                        command_text=f"/skills {subcommand} {skill.name}",
-                        kind="skill",
-                    )
-                    for skill in skills
-                ]
+            if subcommand in {"use", "drop", "show"}:
+                return self._skill_matches(context, subcommand)
+            return _subcommand_matches(prefix=subcommand)
         return []
 
     def execute(self, context, args: str) -> CommandResult:
@@ -60,8 +24,10 @@ class SkillsCommand(CommandBase):
 
         config = context.runtime["config"]
         registry = SkillRegistry(root=config.skills_dir)
+        session = _current_session(context, create=subcommand in {"use", "clear"})
+        active_names = {skill["name"] for skill in getattr(session, "active_skills", [])} if session else set()
 
-        if subcommand == "list":
+        if subcommand in {"list", ""}:
             try:
                 skills = registry.list_skills()
             except Exception as e:
@@ -69,28 +35,21 @@ class SkillsCommand(CommandBase):
                     status_message=f"Failed to list skills: {e}",
                 )
 
-            active_names = {s["name"] for s in context.session.active_skills}
+            if not skills:
+                return CommandResult(status_message="skills: none")
 
-            lines = []
+            items = []
             for skill in skills:
-                status = "✓" if skill.name in active_names else " "
-                lines.append(f"[bold]{status} {skill.name}[/bold] - {skill.title}")
-                lines.append(f"    {skill.summary}")
-                if skill.tags:
-                    lines.append(f"    tags: {', '.join(skill.tags)}")
-                lines.append("")
-
-            if not lines:
-                lines.append("No skills found in global registry.")
-
+                marker = "*" if skill.name in active_names else "-"
+                items.append(f"{marker}{skill.name}")
             return CommandResult(
-                status_message="\n".join(lines),
+                status_message="skills: " + ", ".join(items),
             )
 
-        elif subcommand == "activate":
+        if subcommand in {"use", "activate"}:
             if len(parts) < 2:
                 return CommandResult(
-                    status_message="Usage: /skills activate <skill-name>",
+                    status_message="usage: /skills use <skill-name>",
                 )
             name = parts[1]
 
@@ -98,60 +57,146 @@ class SkillsCommand(CommandBase):
                 skill = registry.load_skill(name)
             except FileNotFoundError:
                 return CommandResult(
-                    status_message=f"Skill '{name}' not found",
+                    warning_message=f"skill not found: {name}",
                 )
 
-            # Check if already active
-            active_names = {s["name"] for s in context.session.active_skills}
-            if name in active_names:
+            if session is None:
+                return CommandResult(warning_message="unable to open session")
+
+            context_manager = context.runtime["context"]
+            record, activated = context_manager.activate_skill(session, skill, source="user")
+            if not activated:
                 return CommandResult(
-                    status_message=f"Skill '{name}' is already active",
+                    status_message=f"skill already active: {name}",
+                    selected_session_id=session.session_id,
                 )
-
-            # Add to active skills
-            import hashlib
-            from datetime import datetime
-
-            body_hash = hashlib.sha256(skill.body.encode("utf-8")).hexdigest()
-            skill_hash = f"sha256:{body_hash}"
-
-            skill_record = {
-                "name": skill.name,
-                "title": skill.title,
-                "hash": skill_hash,
-                "activated_at": datetime.utcnow().isoformat() + "Z",
-                "source": "user",
+            event = {
+                "type": "skill_activated",
+                "session_id": session.session_id,
+                "turn_id": "command",
+                "name": record["name"],
+                "title": record["title"],
+                "source": record["source"],
+                "hash": record["hash"],
             }
-
-            context.session.active_skills.append(skill_record)
-
+            session.events.append(event)
+            context_manager.flush(session)
             return CommandResult(
-                status_message=f"Skill '{name}' activated",
+                status_message=f"skill active: {name}",
+                selected_session_id=session.session_id,
+                timeline_events=[event],
             )
 
-        elif subcommand == "deactivate":
+        if subcommand in {"drop", "deactivate"}:
             if len(parts) < 2:
                 return CommandResult(
-                    status_message="Usage: /skills deactivate <skill-name>",
+                    status_message="usage: /skills drop <skill-name>",
                 )
             name = parts[1]
-
-            # Remove from active skills
-            original_len = len(context.session.active_skills)
-            context.session.active_skills = [
-                s for s in context.session.active_skills if s["name"] != name
-            ]
-
-            if len(context.session.active_skills) < original_len:
+            if session is None:
                 return CommandResult(
-                    status_message=f"Skill '{name}' deactivated",
+                    status_message=f"skill not active: {name}",
                 )
-            else:
+            removed = context.runtime["context"].deactivate_skill(session, name)
+            if not removed:
                 return CommandResult(
-                    status_message=f"Skill '{name}' was not active",
+                    status_message=f"skill not active: {name}",
+                    selected_session_id=session.session_id,
                 )
-
-        else:
+            event = {
+                "type": "skill_dropped",
+                "session_id": session.session_id,
+                "turn_id": "command",
+                "name": name,
+            }
+            session.events.append(event)
+            context.runtime["context"].flush(session)
             return CommandResult(
-                status_message=f"Unknown subcommand: {subcommand}",
+                status_message=f"skill removed: {name}",
+                selected_session_id=session.session_id,
+                timeline_events=[event],
             )
+
+        if subcommand == "clear":
+            if session is None or not session.active_skills:
+                return CommandResult(status_message="no active skills")
+            cleared = context.runtime["context"].clear_skills(session)
+            events = [
+                {
+                    "type": "skill_dropped",
+                    "session_id": session.session_id,
+                    "turn_id": "command",
+                    "name": skill["name"],
+                }
+                for skill in cleared
+            ]
+            session.events.extend(events)
+            context.runtime["context"].flush(session)
+            return CommandResult(
+                status_message="cleared active skills",
+                selected_session_id=session.session_id,
+                timeline_events=events,
+            )
+
+        if subcommand == "show":
+            if len(parts) < 2:
+                return CommandResult(status_message="usage: /skills show <skill-name>")
+            name = parts[1]
+            try:
+                skill = registry.load_skill(name)
+            except FileNotFoundError:
+                return CommandResult(warning_message=f"skill not found: {name}")
+            tags = f" | tags: {', '.join(skill.tags)}" if skill.tags else ""
+            return CommandResult(
+                status_message=f"{skill.name}: {skill.title} - {skill.summary}{tags}",
+            )
+
+        return CommandResult(warning_message=f"unknown /skills subcommand: {subcommand}")
+
+    @staticmethod
+    def _skill_matches(context, subcommand: str) -> list[CommandMatch]:
+        registry = SkillRegistry(root=context.runtime["config"].skills_dir)
+        try:
+            skills = registry.list_skills()
+        except Exception:
+            skills = []
+        return [
+            CommandMatch(
+                name=skill.name,
+                summary=skill.summary,
+                label=skill.name,
+                command_text=f"/skills {subcommand} {skill.name}",
+                kind="skill",
+            )
+            for skill in skills
+        ]
+
+
+def _current_session(context, *, create: bool):
+    runtime_context = context.runtime["context"]
+    if context.session_id:
+        return runtime_context.open(locator={"id": context.session_id})
+    if create:
+        return runtime_context.open()
+    return None
+
+
+def _subcommand_matches(prefix: str) -> list[CommandMatch]:
+    subcommands = [
+        ("list", "List available skills"),
+        ("use", "Activate a skill for this session"),
+        ("drop", "Remove one active skill"),
+        ("clear", "Remove all active skills"),
+        ("show", "Show one skill summary"),
+    ]
+    return [
+        CommandMatch(
+            name=name,
+            summary=summary,
+            label=name,
+            command_text=f"/skills {name}" + (" " if name in {"use", "drop", "show"} else ""),
+            kind="subcommand",
+        )
+        for name, summary in subcommands
+        if name.startswith(prefix)
+    ]

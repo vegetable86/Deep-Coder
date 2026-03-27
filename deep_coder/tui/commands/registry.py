@@ -5,6 +5,7 @@ from deep_coder.tui.commands.builtin.exit import ExitCommand
 from deep_coder.tui.commands.builtin.history import HistoryCommand
 from deep_coder.tui.commands.builtin.model import ModelCommand
 from deep_coder.tui.commands.builtin.session import SessionCommand
+from deep_coder.tui.commands.builtin.skills import SkillsCommand
 from deep_coder.tui.commands.parser import parse_command_text
 
 
@@ -14,7 +15,9 @@ class CommandRegistry:
 
     @classmethod
     def with_builtin_commands(cls):
-        return cls([ModelCommand(), HistoryCommand(), SessionCommand(), ExitCommand()])
+        return cls(
+            [ModelCommand(), HistoryCommand(), SessionCommand(), SkillsCommand(), ExitCommand()]
+        )
 
     def match(self, composer_text: str, **context_kwargs) -> list:
         parsed = parse_command_text(composer_text)

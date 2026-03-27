@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 
 
@@ -10,3 +11,8 @@ class SkillDefinition:
     body: str
     path: Path
     tags: tuple[str, ...] = ()
+
+    @property
+    def content_hash(self) -> str:
+        digest = hashlib.sha256(self.body.encode("utf-8")).hexdigest()
+        return f"sha256:{digest}"

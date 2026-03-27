@@ -36,6 +36,21 @@ def test_cli_loads_default_model_from_registry(monkeypatch, tmp_path):
     assert runtime["registry"].default_model() == "deepseek-reasoner"
 
 
+def test_cli_uses_registry_root_for_global_skills(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    registry_root = tmp_path / ".deepcode"
+
+    project, runtime = resolve_launch_context(
+        cwd=workspace,
+        registry_root=registry_root,
+    )
+
+    assert project.path == workspace.resolve()
+    assert runtime["config"].skills_dir == registry_root / "skills"
+
+
 def test_cli_loads_global_context_settings_from_registry(monkeypatch, tmp_path):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     workspace = tmp_path / "repo"

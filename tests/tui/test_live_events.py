@@ -208,6 +208,47 @@ def test_live_context_compaction_events_render_inline_and_pulse_status(
     asyncio.run(run())
 
 
+def test_live_skill_events_render_inline_in_timeline(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "skill_activated",
+                    "session_id": "session-a",
+                    "turn_id": "command",
+                    "name": "python-tests",
+                    "title": "Python Test Fixing",
+                    "source": "user",
+                    "hash": "sha256:test",
+                }
+            )
+            app.emit(
+                {
+                    "type": "skill_dropped",
+                    "session_id": "session-a",
+                    "turn_id": "command",
+                    "name": "python-tests",
+                }
+            )
+            app.emit(
+                {
+                    "type": "skill_missing",
+                    "session_id": "session-a",
+                    "turn_id": "command",
+                    "name": "python-tests",
+                }
+            )
+            await asyncio.sleep(0)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "Skill active: python-tests" in timeline_text
+            assert "Skill removed: python-tests" in timeline_text
+            assert "Skill missing: python-tests" in timeline_text
+
+    asyncio.run(run())
+
+
 def test_interrupted_turn_renders_marker_without_final_assistant_message(
     fake_runtime,
     fake_project,

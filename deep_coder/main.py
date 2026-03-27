@@ -17,6 +17,7 @@ from deep_coder.tools.registry import ToolRegistry
 def build_runtime(
     workdir: Path | None = None,
     state_dir: Path | None = None,
+    global_state_dir: Path | None = None,
     project: ProjectRecord | None = None,
     model_name: str | None = None,
     context_settings: dict | None = None,
@@ -25,6 +26,7 @@ def build_runtime(
     if project is not None:
         config = RuntimeConfig.from_project(
             project,
+            global_state_dir=global_state_dir,
             model_name=model_name,
             context_settings=context_settings,
         )
@@ -32,6 +34,7 @@ def build_runtime(
         config = RuntimeConfig.from_env(
             workdir=workdir,
             state_dir=state_dir,
+            global_state_dir=global_state_dir,
             model_name=model_name,
             context_settings=context_settings,
         )

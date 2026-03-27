@@ -3,6 +3,7 @@ from io import StringIO
 from pathlib import Path
 import time
 from types import SimpleNamespace
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -17,6 +18,7 @@ class FakeSession:
     session_id: str
     events: list[dict] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)
+    active_skills: list[dict] = field(default_factory=list)
     project_key: str | None = None
     workspace_path: str | None = None
 
@@ -63,6 +65,35 @@ class FakeContext:
 
     def flush(self, session) -> None:
         self._sessions[session.session_id] = session
+
+    def activate_skill(self, session, skill, *, source: str):
+        for active_skill in session.active_skills:
+            if active_skill["name"] == skill.name and active_skill["hash"] == skill.content_hash:
+                return active_skill, False
+        record = {
+            "name": skill.name,
+            "title": skill.title,
+            "hash": skill.content_hash,
+            "activated_at": _utc_now(),
+            "source": source,
+        }
+        session.active_skills.append(record)
+        self.flush(session)
+        return record, True
+
+    def deactivate_skill(self, session, name: str) -> bool:
+        original_count = len(session.active_skills)
+        session.active_skills = [
+            active_skill for active_skill in session.active_skills if active_skill["name"] != name
+        ]
+        self.flush(session)
+        return len(session.active_skills) != original_count
+
+    def clear_skills(self, session) -> list[dict]:
+        cleared = list(session.active_skills)
+        session.active_skills = []
+        self.flush(session)
+        return cleared
 
 
 class FakeTurnSubprocess:
@@ -242,6 +273,11 @@ def render_widget_text(widget, width: int = 120) -> str:
     return render_plain_text(widget.render(), width=width)
 
 
+def _utc_now() -> str:
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return now.replace("+00:00", "Z")
+
+
 @pytest.fixture
 def fake_project(tmp_path: Path) -> ProjectRecord:
     workspace = tmp_path / "repo"
@@ -256,7 +292,18 @@ def fake_project(tmp_path: Path) -> ProjectRecord:
 
 
 @pytest.fixture
-def fake_runtime(fake_project: ProjectRecord):
+def fake_runtime(fake_project: ProjectRecord, tmp_path: Path):
+    skills_dir = tmp_path / ".deepcode" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "python-tests.md").write_text(
+        "---\n"
+        "name: python-tests\n"
+        "title: Python Test Fixing\n"
+        "summary: Use when diagnosing pytest failures.\n"
+        "tags: [python, pytest]\n"
+        "---\n\n"
+        "Skill body.\n"
+    )
     session_a = FakeSession(
         session_id="session-a",
         project_key=fake_project.key,
@@ -295,7 +342,7 @@ def fake_runtime(fake_project: ProjectRecord):
         events=[],
     )
     context = FakeContext([session_a, session_b, session_other])
-    config = SimpleNamespace(model_name="deepseek-chat")
+    config = SimpleNamespace(model_name="deepseek-chat", skills_dir=skills_dir)
     turn_starter = FakeTurnStarter(context)
     return {
         "config": config,

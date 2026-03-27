@@ -42,6 +42,7 @@ class CommandResult:
     selected_session_id: str | None = None
     updated_model_name: str | None = None
     should_exit: bool = False
+    timeline_events: list[dict] = field(default_factory=list)
 
 
 class CommandBase(ABC):

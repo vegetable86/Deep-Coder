@@ -19,6 +19,7 @@ class RuntimeConfig:
     base_url: str
     workdir: Path
     state_dir: Path
+    global_state_dir: Path
     project_path: Path
     project_key: str
     project_name: str
@@ -29,18 +30,20 @@ class RuntimeConfig:
 
     @property
     def skills_dir(self) -> Path:
-        return self.state_dir / "skills"
+        return self.global_state_dir / "skills"
 
     @classmethod
     def from_env(
         cls,
         workdir: Path | None = None,
         state_dir: Path | None = None,
+        global_state_dir: Path | None = None,
         model_name: str | None = None,
         context_settings: dict | None = None,
     ):
         workdir = (workdir or Path.cwd()).resolve()
         state_dir = state_dir or (Path.home() / ".deepcode")
+        global_state_dir = (global_state_dir or state_dir).resolve()
         context_values = _resolve_context_settings(context_settings)
         return cls(
             model_provider="deepseek",
@@ -49,6 +52,7 @@ class RuntimeConfig:
             base_url="https://api.deepseek.com",
             workdir=workdir,
             state_dir=state_dir,
+            global_state_dir=global_state_dir,
             project_path=workdir,
             project_key="default",
             project_name=workdir.name or "workspace",
@@ -62,9 +66,11 @@ class RuntimeConfig:
     def from_project(
         cls,
         project,
+        global_state_dir: Path | None = None,
         model_name: str | None = None,
         context_settings: dict | None = None,
     ):
+        global_state_dir = (global_state_dir or (Path.home() / ".deepcode")).resolve()
         context_values = _resolve_context_settings(context_settings)
         return cls(
             model_provider="deepseek",
@@ -73,6 +79,7 @@ class RuntimeConfig:
             base_url="https://api.deepseek.com",
             workdir=project.path,
             state_dir=project.state_dir,
+            global_state_dir=global_state_dir,
             project_path=project.path,
             project_key=project.key,
             project_name=project.name,

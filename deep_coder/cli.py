@@ -14,6 +14,7 @@ def resolve_launch_context(
     project = registry.open_workspace(cwd)
     runtime = build_runtime(
         project=project,
+        global_state_dir=registry.root,
         model_name=registry.default_model(),
         context_settings=registry.context_settings(),
         registry=registry,

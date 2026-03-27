@@ -18,6 +18,14 @@ def test_registry_filters_commands_by_prefix():
     assert [match.name for match in matches] == ["history"]
 
 
+def test_registry_lists_skills_command():
+    registry = CommandRegistry.with_builtin_commands()
+
+    matches = registry.match("/")
+
+    assert "skills" in [match.name for match in matches]
+
+
 def test_session_command_returns_reset_action(fake_runtime, fake_project):
     registry = CommandRegistry.with_builtin_commands()
 
@@ -107,3 +115,33 @@ def test_model_command_updates_runtime_and_registry(fake_runtime, fake_project):
     assert result.updated_model_name == "deepseek-reasoner"
     assert fake_runtime["config"].model_name == "deepseek-reasoner"
     assert fake_runtime["registry"].default_model() == "deepseek-reasoner"
+
+
+def test_skills_command_activates_skill_for_session(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+
+    result = registry.execute(
+        "/skills use python-tests",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
+
+    session = fake_runtime["context"].open(locator={"id": "session-a"})
+    assert result.status_message == "skill active: python-tests"
+    assert session.active_skills[0]["name"] == "python-tests"
+
+
+def test_skills_command_lists_available_skills(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+
+    result = registry.execute(
+        "/skills",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
+
+    assert "python-tests" in result.status_message

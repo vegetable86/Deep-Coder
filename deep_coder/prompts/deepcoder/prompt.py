@@ -8,6 +8,9 @@ class DeepCoderPrompt(PromptBase):
     def render(self, session_snapshot: dict, tool_schemas: list[dict]) -> str:
         tool_names = ", ".join(schema["function"]["name"] for schema in tool_schemas)
         session_id = session_snapshot.get("id", "new-session")
+        has_skill_loader = any(
+            schema["function"]["name"] == "load_skill" for schema in tool_schemas
+        )
         sections = [
             (
                 "You are DeepCode, a project-scoped coding agent working inside the "
@@ -55,6 +58,15 @@ class DeepCoderPrompt(PromptBase):
                 "or inspect the workspace.\n"
                 "- If the answer is already clear from the current context, respond "
                 "directly without unnecessary tool calls."
+            ),
+            (
+                "Skill policy:\n"
+                "- A compact skill index may be provided separately in the request context.\n"
+                "- Evaluate whether the current task needs a skill before acting.\n"
+                "- If a listed skill is relevant, use the load_skill tool to activate it.\n"
+                "- Do not load skills unnecessarily."
+                if has_skill_loader
+                else "Skill policy:\n- No dynamic skill loader is available in this run."
             ),
             (
                 "Session history policy:\n"

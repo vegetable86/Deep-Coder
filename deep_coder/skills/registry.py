@@ -1,14 +1,13 @@
-import yaml
 from pathlib import Path
-from typing import List
+
 from .models import SkillDefinition
 
 
 class SkillRegistry:
     def __init__(self, root: Path):
-        self.root = root
+        self.root = Path(root)
 
-    def list_skills(self) -> List[SkillDefinition]:
+    def list_skills(self) -> list[SkillDefinition]:
         skills = []
         if not self.root.exists():
             return skills
@@ -30,15 +29,7 @@ class SkillRegistry:
 
     def _load_skill_from_path(self, path: Path) -> SkillDefinition:
         content = path.read_text(encoding="utf-8")
-        if not content.startswith("---\n"):
-            raise ValueError(f"Skill file {path} does not start with YAML frontmatter")
-
-        parts = content.split("---\n", 2)
-        if len(parts) < 3:
-            raise ValueError(f"Skill file {path} has malformed YAML frontmatter")
-
-        frontmatter = yaml.safe_load(parts[1])
-        body = parts[2].lstrip('\n')
+        frontmatter, body = _parse_frontmatter(content, path)
 
         name = frontmatter.get("name")
         title = frontmatter.get("title")
@@ -59,3 +50,34 @@ class SkillRegistry:
             path=path,
             tags=tuple(tags),
         )
+
+
+def _parse_frontmatter(content: str, path: Path) -> tuple[dict[str, object], str]:
+    if not content.startswith("---\n"):
+        raise ValueError(f"Skill file {path} does not start with YAML frontmatter")
+
+    try:
+        _, remainder = content.split("---\n", 1)
+        frontmatter_text, body = remainder.split("\n---\n", 1)
+    except ValueError as exc:
+        raise ValueError(f"Skill file {path} has malformed YAML frontmatter") from exc
+
+    metadata: dict[str, object] = {}
+    for raw_line in frontmatter_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        key, separator, raw_value = line.partition(":")
+        if not separator:
+            raise ValueError(f"Skill file {path} has malformed frontmatter line: {raw_line}")
+        metadata[key.strip()] = _parse_metadata_value(raw_value.strip())
+    return metadata, body.lstrip("\n")
+
+
+def _parse_metadata_value(value: str) -> object:
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [item.strip().strip("'\"") for item in inner.split(",") if item.strip()]
+    return value.strip().strip("'\"")

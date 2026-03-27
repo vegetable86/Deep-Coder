@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime, timezone
 
 from deep_coder.context.records import make_evidence_record, make_journal_entry
 from deep_coder.context.stores.base import SessionStoreBase
@@ -156,6 +157,38 @@ class ContextManager:
     def flush(self, session) -> None:
         self.store.save(session)
 
+    def activate_skill(self, session, skill, *, source: str) -> tuple[dict, bool]:
+        for active_skill in session.active_skills:
+            if active_skill["name"] == skill.name and active_skill["hash"] == skill.content_hash:
+                return active_skill, False
+
+        session.active_skills = [
+            active_skill
+            for active_skill in session.active_skills
+            if active_skill["name"] != skill.name
+        ]
+        record = {
+            "name": skill.name,
+            "title": skill.title,
+            "hash": skill.content_hash,
+            "activated_at": _utc_now(),
+            "source": source,
+        }
+        session.active_skills.append(record)
+        return record, True
+
+    def deactivate_skill(self, session, name: str) -> bool:
+        original_count = len(session.active_skills)
+        session.active_skills = [
+            active_skill for active_skill in session.active_skills if active_skill["name"] != name
+        ]
+        return len(session.active_skills) != original_count
+
+    def clear_skills(self, session) -> list[dict]:
+        cleared = list(session.active_skills)
+        session.active_skills = []
+        return cleared
+
     @staticmethod
     def _append_message(session, message: dict) -> None:
         session.append(message)
@@ -189,3 +222,8 @@ class ContextManager:
     @staticmethod
     def _next_id(prefix: str) -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def _utc_now() -> str:
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return now.replace("+00:00", "Z")

@@ -583,3 +583,68 @@ def test_harness_triggers_compaction_after_large_prompt_usage(tmp_path):
         reopened.journal[0]["event_id"],
         reopened.journal[1]["event_id"],
     ]
+
+
+def test_harness_injects_skill_index_and_active_skill_bodies(tmp_path):
+    skills_dir = tmp_path / ".deepcode" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "python-tests.md").write_text(
+        "---\n"
+        "name: python-tests\n"
+        "title: Python Test Fixing\n"
+        "summary: Use when diagnosing pytest failures.\n"
+        "---\n\n"
+        "Reproduce the failing pytest command first.\n"
+    )
+    captured_messages = []
+
+    class FakeModel:
+        def complete(self, request):
+            captured_messages.extend(request["messages"])
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return [{"function": {"name": "load_skill"}}]
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    session = context.open(locator={"id": "session-a"})
+    session.active_skills = [
+        {
+            "name": "python-tests",
+            "title": "Python Test Fixing",
+            "hash": "sha256:test",
+            "activated_at": "2026-03-27T00:00:00Z",
+            "source": "user",
+        }
+    ]
+    context.flush(session)
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(skills_dir=skills_dir),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    harness.run(session_locator={"id": "session-a"}, user_input="fix the tests")
+
+    assert captured_messages[0]["role"] == "system"
+    assert "load_skill" in captured_messages[0]["content"]
+    assert captured_messages[1] == {
+        "role": "system",
+        "content": "Available skills:\n- python-tests: Python Test Fixing - Use when diagnosing pytest failures.",
+    }
+    assert captured_messages[2]["role"] == "system"
+    assert "Python Test Fixing" in captured_messages[2]["content"]
+    assert "Reproduce the failing pytest command first." in captured_messages[2]["content"]

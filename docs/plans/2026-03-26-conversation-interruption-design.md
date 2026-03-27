@@ -148,6 +148,7 @@ For `bash`, the parent must terminate the entire turn process group so shell chi
 1. User triggers interrupt while a turn is active.
 2. The TUI marks status as `interrupting`.
 3. The parent sends termination to the turn process group.
+   It first sends `SIGTERM` and escalates to `SIGKILL` after a short grace period if the group is still alive.
 4. The event reader exits once the subprocess pipe closes.
 5. The parent reopens the active session, appends `turn_interrupted`, saves it, emits it locally, and clears active turn state.
 6. The TUI returns to `idle`.

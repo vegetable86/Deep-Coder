@@ -5,11 +5,13 @@ import select
 import signal
 import subprocess
 import sys
+import time
 
 
 class TurnSubprocess:
     def __init__(self, process: subprocess.Popen[str]):
         self._process = process
+        self._process_group_id = process.pid
 
     def read_event(self, timeout: float | None = None) -> dict | None:
         stdout = self._process.stdout
@@ -30,13 +32,21 @@ class TurnSubprocess:
     def wait(self, timeout: float | None = None) -> int:
         return self._process.wait(timeout=timeout)
 
-    def interrupt(self) -> None:
-        if self.poll() is not None:
+    def interrupt(self, *, grace_period: float = 0.2) -> None:
+        if not self._process_group_exists() and self.poll() is not None:
             return
-        try:
-            os.killpg(self._process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
+        self._signal_process_group(signal.SIGTERM)
+        deadline = time.time() + grace_period
+        while time.time() < deadline:
+            if not self._process_group_exists():
+                return
+            time.sleep(0.05)
+        self._signal_process_group(signal.SIGKILL)
+        kill_deadline = time.time() + grace_period
+        while time.time() < kill_deadline:
+            if not self._process_group_exists():
+                return
+            time.sleep(0.05)
 
     def close(self) -> None:
         if self._process.stdin is not None and not self._process.stdin.closed:
@@ -45,6 +55,21 @@ class TurnSubprocess:
             self._process.stdout.close()
         if self._process.stderr is not None and not self._process.stderr.closed:
             self._process.stderr.close()
+
+    def _signal_process_group(self, sig: int) -> None:
+        try:
+            os.killpg(self._process_group_id, sig)
+        except ProcessLookupError:
+            return
+
+    def _process_group_exists(self) -> bool:
+        try:
+            os.killpg(self._process_group_id, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
 
 
 def start_turn_subprocess(

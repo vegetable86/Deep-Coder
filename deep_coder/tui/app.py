@@ -1,6 +1,6 @@
 from rich.console import Group, RenderableType
 from rich.text import Text
-from textual import work
+import threading
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalScroll
@@ -8,12 +8,14 @@ from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
+from deep_coder.harness import start_turn_subprocess
 from deep_coder.tui.commands import CommandRegistry
 from deep_coder.tui.commands.parser import parse_command_text
 from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
     render_task_snapshot_block,
+    render_turn_interrupted_block,
     render_tool_call_block,
     render_tool_output,
     render_usage_block,
@@ -133,7 +135,10 @@ class StatusStrip(Static):
         self.update(self._build_text())
 
     def _sync_busy_state(self) -> None:
-        is_busy = self._turn_state == "running" or self._turn_state.startswith("tool:")
+        is_busy = (
+            self._turn_state in {"running", "interrupting"}
+            or self._turn_state.startswith("tool:")
+        )
         self.set_class(is_busy, "busy")
         if is_busy:
             if self._pulse_timer is None:
@@ -175,6 +180,7 @@ class DeepCodeApp(App):
     BINDINGS = [
         Binding("ctrl+l", "open_session_switcher", "Sessions"),
         Binding("ctrl+j", "focus_timeline", "Timeline"),
+        Binding("ctrl+c", "interrupt_turn", "Interrupt"),
     ]
 
     def __init__(self, runtime, project):
@@ -186,6 +192,9 @@ class DeepCodeApp(App):
         self._turn_state = "idle"
         self._command_feedback = ""
         self._command_registry = CommandRegistry.with_builtin_commands()
+        self._active_turn = None
+        self._interrupt_requested = False
+        self._turn_thread = None
 
     def compose(self) -> ComposeResult:
         with TimelineScroll(id="timeline-scroll"):
@@ -247,11 +256,28 @@ class DeepCodeApp(App):
             composer.load_text("")
             self.action_refresh_command_palette()
             return
+        if self._turn_state != "idle":
+            return
         composer.load_text("")
         self._command_feedback = ""
+        self._active_turn = self.runtime.get("turn_starter", start_turn_subprocess)(
+            project=self.project,
+            model_name=self.runtime["config"].model_name,
+            session_id=self.session_id,
+            user_input=user_input,
+        )
         self._turn_state = "running"
+        self._interrupt_requested = False
         self._update_status_strip()
-        self.run_turn(user_input)
+        self.run_turn(self._active_turn)
+
+    def action_interrupt_turn(self) -> None:
+        if self._active_turn is None or self._turn_state == "idle":
+            return
+        self._interrupt_requested = True
+        self._turn_state = "interrupting"
+        self._update_status_strip()
+        self._active_turn.interrupt()
 
     def action_refresh_command_palette(self) -> None:
         if not self.is_mounted:
@@ -319,13 +345,42 @@ class DeepCodeApp(App):
         if session_id:
             self.load_session(session_id)
 
-    @work(thread=True)
-    def run_turn(self, user_input: str) -> None:
-        self.runtime["harness"].run(
-            session_locator={"id": self.session_id} if self.session_id else None,
-            user_input=user_input,
-            event_sink=self,
+    def run_turn(self, turn) -> None:
+        self._turn_thread = threading.Thread(
+            target=self._run_turn_worker,
+            args=(turn,),
+            daemon=True,
         )
+        self._turn_thread.start()
+
+    def _run_turn_worker(self, turn) -> None:
+        interrupted_session_id = self.session_id
+        interrupted_turn_id = None
+        try:
+            while True:
+                event = turn.read_event(timeout=0.1)
+                if event is not None:
+                    interrupted_session_id = event.get(
+                        "session_id",
+                        interrupted_session_id,
+                    )
+                    interrupted_turn_id = event.get("turn_id", interrupted_turn_id)
+                    self.emit(event)
+                    continue
+                if turn.poll() is not None:
+                    break
+            turn.wait(timeout=1)
+        finally:
+            turn.close()
+            self._active_turn = None
+            self._turn_thread = None
+
+        if self._interrupt_requested:
+            self._interrupt_requested = False
+            self._record_turn_interrupted(
+                session_id=interrupted_session_id,
+                turn_id=interrupted_turn_id,
+            )
 
     def emit(self, event: dict) -> None:
         self.post_message(TimelineEvent(event))
@@ -334,11 +389,11 @@ class DeepCodeApp(App):
         event = message.event
         self.session_id = event.get("session_id", self.session_id)
         event_type = event["type"]
-        if event_type == "turn_started":
+        if event_type == "turn_started" and self._turn_state != "interrupting":
             self._turn_state = "running"
-        elif event_type == "tool_called":
+        elif event_type == "tool_called" and self._turn_state != "interrupting":
             self._turn_state = f"tool:{event['name']}"
-        elif event_type == "turn_finished":
+        elif event_type in {"turn_finished", "turn_interrupted"}:
             self._turn_state = "idle"
 
         follow_tail = self._timeline_is_at_end()
@@ -360,6 +415,8 @@ class DeepCodeApp(App):
             block = render_usage_block(event)
         elif event_type == "task_snapshot":
             block = render_task_snapshot_block(event)
+        elif event_type == "turn_interrupted":
+            block = render_turn_interrupted_block(event)
         else:
             return
         self._timeline_blocks.append(block)
@@ -428,6 +485,27 @@ class DeepCodeApp(App):
         self._turn_state = "idle"
         self._refresh_timeline()
         self._update_status_strip()
+
+    def _record_turn_interrupted(
+        self,
+        *,
+        session_id: str | None,
+        turn_id: str | None,
+    ) -> None:
+        if not session_id or not turn_id:
+            self._turn_state = "idle"
+            self._update_status_strip()
+            return
+        session = self.runtime["context"].open(locator={"id": session_id})
+        event = {
+            "type": "turn_interrupted",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "reason": "user_interrupt",
+        }
+        session.events.append(event)
+        self.runtime["context"].flush(session)
+        self.emit(event)
 
     def _compose_timeline_renderable(self) -> RenderableType:
         if not self._timeline_blocks:

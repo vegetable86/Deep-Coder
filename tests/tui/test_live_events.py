@@ -4,7 +4,7 @@ from deep_coder.tui.app import DeepCodeApp
 from tests.tui.conftest import render_widget_text
 
 
-def test_submit_runs_harness_and_appends_live_events(fake_runtime, fake_project):
+def test_submit_runs_turn_starter_and_appends_live_events(fake_runtime, fake_project):
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
         async with app.run_test(size=(120, 40)) as pilot:
@@ -13,6 +13,8 @@ def test_submit_runs_harness_and_appends_live_events(fake_runtime, fake_project)
             await pilot.press("enter")
             await pilot.pause()
             timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert fake_runtime["turn_starter"].calls[-1]["session_id"] is None
+            assert fake_runtime["turn_starter"].calls[-1]["user_input"] == "make dir aa"
             assert "mkdir aa" in timeline_text
             assert "prompt 10 | usage 15 | hit 3 | miss 7" in timeline_text
             assert "done" in timeline_text
@@ -153,6 +155,29 @@ def test_live_task_snapshot_event_renders_inline_in_timeline(fake_runtime, fake_
 
             timeline_text = render_widget_text(app.query_one("#timeline"))
             assert "[>] #1: inspect repo" in timeline_text
+
+    asyncio.run(run())
+
+
+def test_interrupted_turn_renders_marker_without_final_assistant_message(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        fake_runtime["turn_starter"].mode = "blocking"
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "wait there"
+            app.action_submit_composer()
+            await asyncio.sleep(0.05)
+
+            await app.run_action("interrupt_turn")
+            await asyncio.sleep(0.15)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "interrupted" in timeline_text.lower()
+            assert "done" not in timeline_text
 
     asyncio.run(run())
 

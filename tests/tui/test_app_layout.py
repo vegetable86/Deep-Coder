@@ -167,6 +167,31 @@ def test_busy_command_shows_warning_in_status_strip(fake_runtime, fake_project):
     asyncio.run(run())
 
 
+def test_interrupt_action_transitions_status_from_running_to_idle(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        fake_runtime["turn_starter"].mode = "blocking"
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "wait there"
+            app.action_submit_composer()
+            await asyncio.sleep(0.05)
+
+            await app.run_action("interrupt_turn")
+            status = render_widget_text(app.query_one("#status-strip"))
+            assert "interrupting" in status
+
+            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.15)
+            status = render_widget_text(app.query_one("#status-strip"))
+            assert "idle" in status
+
+    asyncio.run(run())
+
+
 def test_status_strip_animates_only_while_busy(fake_runtime, fake_project):
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
@@ -264,8 +289,8 @@ def test_next_prompt_after_session_command_uses_new_session_locator(fake_runtime
             await pilot.press("enter")
             await pilot.pause()
 
-            assert fake_runtime["harness"].calls[-1]["session_locator"] is None
-            assert fake_runtime["harness"].calls[-1]["user_input"] == "follow up"
+            assert fake_runtime["turn_starter"].calls[-1]["session_id"] is None
+            assert fake_runtime["turn_starter"].calls[-1]["user_input"] == "follow up"
             assert app.session_id == "session-new-1"
 
     asyncio.run(run())

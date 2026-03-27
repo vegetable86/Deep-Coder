@@ -2,6 +2,7 @@ from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
     render_task_snapshot_block,
+    render_turn_interrupted_block,
     render_tool_output,
     render_usage_block,
 )
@@ -101,3 +102,9 @@ def test_render_task_snapshot_block_shows_status_markers_and_progress():
     assert "[x] #1: inspect repo" in text
     assert "[ ] #2: edit app" in text
     assert "(1/2 completed)" in text
+
+
+def test_render_turn_interrupted_block():
+    block = render_turn_interrupted_block({"reason": "user_interrupt"})
+
+    assert "interrupted" in render_plain_text(block).lower()

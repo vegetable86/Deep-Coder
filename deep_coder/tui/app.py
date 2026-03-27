@@ -1,6 +1,8 @@
 from rich.console import Group, RenderableType
 from rich.text import Text
+import signal
 import threading
+from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalScroll
@@ -180,7 +182,7 @@ class DeepCodeApp(App):
     BINDINGS = [
         Binding("ctrl+l", "open_session_switcher", "Sessions"),
         Binding("ctrl+j", "focus_timeline", "Timeline"),
-        Binding("ctrl+c", "interrupt_turn", "Interrupt"),
+        Binding("ctrl+c", "interrupt_turn", "Interrupt", priority=True),
     ]
 
     def __init__(self, runtime, project):
@@ -195,6 +197,9 @@ class DeepCodeApp(App):
         self._active_turn = None
         self._interrupt_requested = False
         self._turn_thread = None
+        self._sigint_pending = False
+        self._sigint_poll_timer = None
+        self._previous_sigint_handler = None
 
     def compose(self) -> ComposeResult:
         with TimelineScroll(id="timeline-scroll"):
@@ -207,7 +212,15 @@ class DeepCodeApp(App):
     def on_mount(self) -> None:
         self.query_one("#composer", Composer).focus()
         self.query_one("#command-palette", CommandPalette).display = False
+        self._install_sigint_handler()
+        self._sigint_poll_timer = self.set_interval(0.05, self._consume_pending_sigint)
         self._update_status_strip()
+
+    def on_unmount(self) -> None:
+        if self._sigint_poll_timer is not None:
+            self._sigint_poll_timer.stop()
+            self._sigint_poll_timer = None
+        self._restore_sigint_handler()
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if event.text_area.id == "composer":
@@ -273,11 +286,33 @@ class DeepCodeApp(App):
 
     def action_interrupt_turn(self) -> None:
         if self._active_turn is None or self._turn_state == "idle":
-            return
+            raise SkipAction()
         self._interrupt_requested = True
         self._turn_state = "interrupting"
         self._update_status_strip()
         self._active_turn.interrupt()
+
+    def _install_sigint_handler(self) -> None:
+        self._previous_sigint_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
+    def _restore_sigint_handler(self) -> None:
+        if self._previous_sigint_handler is None:
+            return
+        signal.signal(signal.SIGINT, self._previous_sigint_handler)
+        self._previous_sigint_handler = None
+
+    def _handle_sigint(self, signum, frame) -> None:
+        self._sigint_pending = True
+
+    def _consume_pending_sigint(self) -> None:
+        if not self._sigint_pending:
+            return
+        self._sigint_pending = False
+        try:
+            self.action_interrupt_turn()
+        except SkipAction:
+            self.action_help_quit()
 
     def action_refresh_command_palette(self) -> None:
         if not self.is_mounted:

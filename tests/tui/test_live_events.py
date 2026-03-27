@@ -1,4 +1,5 @@
 import asyncio
+import signal
 
 from deep_coder.tui.app import DeepCodeApp
 from tests.tui.conftest import render_widget_text
@@ -176,6 +177,31 @@ def test_interrupted_turn_renders_marker_without_final_assistant_message(
             await asyncio.sleep(0.15)
 
             timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "interrupted" in timeline_text.lower()
+            assert "done" not in timeline_text
+
+    asyncio.run(run())
+
+
+def test_sigint_interrupts_running_turn_and_renders_marker(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        fake_runtime["turn_starter"].mode = "blocking"
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            composer = app.query_one("#composer")
+            composer.text = "wait there"
+            app.action_submit_composer()
+            await asyncio.sleep(0.05)
+
+            app._handle_sigint(signal.SIGINT, None)
+            await asyncio.sleep(0.2)
+
+            status_text = render_widget_text(app.query_one("#status-strip"))
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "idle" in status_text
             assert "interrupted" in timeline_text.lower()
             assert "done" not in timeline_text
 

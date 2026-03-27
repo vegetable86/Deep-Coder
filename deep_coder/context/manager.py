@@ -1,3 +1,7 @@
+import json
+import uuid
+
+from deep_coder.context.records import make_evidence_record, make_journal_entry
 from deep_coder.context.stores.base import SessionStoreBase
 from deep_coder.context.strategies.base import ContextStrategyBase
 
@@ -19,6 +23,166 @@ class ContextManager:
     def record_event(self, session, event: dict) -> None:
         self.strategy.record_event(session, event)
 
+    def record_user_message(self, session, turn_id: str, text: str) -> None:
+        self._append_message(
+            session,
+            {"role": "user", "content": text},
+        )
+        self._record_text_event(
+            session,
+            turn_id=turn_id,
+            kind="user_message",
+            role="user",
+            content=text,
+        )
+
+    def record_assistant_message(
+        self,
+        session,
+        turn_id: str,
+        text: str,
+        tool_calls: list[dict] | None = None,
+    ) -> None:
+        message = {"role": "assistant", "content": text}
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+        self._append_message(session, message)
+        if tool_calls:
+            for tool_call in tool_calls:
+                self.record_tool_call(session, turn_id=turn_id, tool_call=tool_call)
+            return
+        self._record_text_event(
+            session,
+            turn_id=turn_id,
+            kind="assistant_message",
+            role="assistant",
+            content=text,
+        )
+
+    def record_tool_call(
+        self,
+        session,
+        turn_id: str,
+        tool_call: dict,
+    ) -> None:
+        event_id = self._next_id("evt")
+        arguments = tool_call.get("arguments", {})
+        journal = make_journal_entry(
+            event_id=event_id,
+            turn_id=turn_id,
+            kind="assistant_tool_call",
+            role="assistant",
+            tool_name=tool_call["name"],
+        )
+        evidence = make_evidence_record(
+            evidence_id=self._next_id("evd"),
+            event_id=event_id,
+            role="assistant",
+            content=json.dumps(arguments, sort_keys=True),
+        )
+        evidence["tool_call_id"] = tool_call.get("id")
+        evidence["arguments"] = arguments
+        session.journal.append(journal)
+        session.evidence.append(evidence)
+
+    def record_tool_result(
+        self,
+        session,
+        turn_id: str,
+        tool_call: dict | None = None,
+        output=None,
+        *,
+        tool_call_id: str | None = None,
+        tool_name: str | None = None,
+        arguments: dict | None = None,
+        model_output: str | None = None,
+        output_text: str | None = None,
+    ) -> None:
+        if tool_call is not None:
+            tool_call_id = tool_call.get("id")
+            tool_name = tool_call.get("name")
+            arguments = tool_call.get("arguments", {})
+        if output is not None:
+            model_output = output.model_output
+            output_text = output.output_text
+            if tool_name is None:
+                tool_name = output.name
+        artifact_id = self._next_id("art")
+        message = {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": model_output or "",
+        }
+        self._append_message(session, message)
+        session.artifacts[artifact_id] = {
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "arguments": arguments or {},
+            "model_output": model_output or "",
+            "output_text": output_text or model_output or "",
+            "display_command": getattr(output, "display_command", None),
+            "diff_text": getattr(output, "diff_text", None),
+            "is_error": getattr(output, "is_error", False),
+        }
+        event_id = self._next_id("evt")
+        journal = make_journal_entry(
+            event_id=event_id,
+            turn_id=turn_id,
+            kind="tool_result",
+            role="tool",
+            tool_name=tool_name,
+            artifact_ids=[artifact_id],
+        )
+        evidence = make_evidence_record(
+            evidence_id=self._next_id("evd"),
+            event_id=event_id,
+            role="tool",
+            content=model_output or "",
+            artifact_id=artifact_id,
+        )
+        evidence["tool_call_id"] = tool_call_id
+        session.journal.append(journal)
+        session.evidence.append(evidence)
+
+    def record_summary(self, session, summary: dict) -> None:
+        session.summaries.append(summary)
+
+    def maybe_compact(self, session, usage: dict | None = None) -> bool:
+        return self.strategy.maybe_compact(session, usage=usage)
+
     def flush(self, session) -> None:
         self.store.save(session)
 
+    @staticmethod
+    def _append_message(session, message: dict) -> None:
+        session.append(message)
+
+    def _record_text_event(
+        self,
+        session,
+        turn_id: str,
+        kind: str,
+        role: str,
+        content: str,
+    ) -> None:
+        event_id = self._next_id("evt")
+        session.journal.append(
+            make_journal_entry(
+                event_id=event_id,
+                turn_id=turn_id,
+                kind=kind,
+                role=role,
+            )
+        )
+        session.evidence.append(
+            make_evidence_record(
+                evidence_id=self._next_id("evd"),
+                event_id=event_id,
+                role=role,
+                content=content,
+            )
+        )
+
+    @staticmethod
+    def _next_id(prefix: str) -> str:
+        return f"{prefix}-{uuid.uuid4().hex[:12]}"

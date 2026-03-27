@@ -30,8 +30,8 @@ def test_context_manager_records_events_and_flushes(tmp_path):
     manager = ContextManager(store=store, strategy=strategy)
 
     session = manager.open()
-    manager.record_event(session, {"role": "user", "content": "hello"})
-    manager.record_event(session, {"role": "assistant", "content": "hi"})
+    manager.record_user_message(session, turn_id="turn-1", text="hello")
+    manager.record_assistant_message(session, turn_id="turn-1", text="hi")
     manager.flush(session)
 
     reopened = manager.open(locator={"id": session.session_id})

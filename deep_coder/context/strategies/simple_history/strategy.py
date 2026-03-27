@@ -2,11 +2,13 @@ from deep_coder.context.strategies.base import ContextStrategyBase
 
 
 class SimpleHistoryContextStrategy(ContextStrategyBase):
-    def prepare_messages(self, session, system_prompt: str, user_input: str) -> list[dict]:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            *session.messages,
-        ]
+    def build_working_set(
+        self,
+        session,
+        system_prompt: str,
+        user_input: str | None,
+    ) -> list[dict]:
+        messages = [*session.messages]
         if user_input is not None:
             messages.append({"role": "user", "content": user_input})
         return messages
@@ -14,8 +16,8 @@ class SimpleHistoryContextStrategy(ContextStrategyBase):
     def record_event(self, session, event: dict) -> None:
         session.append(event)
 
-    def maybe_compact(self, session, usage: dict | None = None) -> None:
-        return None
+    def maybe_compact(self, session, usage: dict | None = None) -> bool:
+        return False
 
     @staticmethod
     def manifest() -> dict:

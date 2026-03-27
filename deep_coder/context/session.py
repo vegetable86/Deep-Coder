@@ -21,6 +21,10 @@ class Session:
     root: Path
     messages: list[dict] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)
+    journal: list[dict] = field(default_factory=list)
+    evidence: list[dict] = field(default_factory=list)
+    summaries: list[dict] = field(default_factory=list)
+    artifacts: dict[str, dict] = field(default_factory=dict)
     next_task_id: int = 1
     tasks: list[dict] = field(default_factory=list)
     project_key: str | None = None

@@ -49,6 +49,43 @@ def test_filesystem_store_persists_messages_and_strategy_state(tmp_path):
     }
 
 
+def test_filesystem_store_persists_layered_context_state(tmp_path):
+    store = FileSystemSessionStore(root=tmp_path)
+    session = store.open()
+    session.journal.append({"event_id": "evt-1", "kind": "user_message"})
+    session.evidence.append(
+        {"evidence_id": "evd-1", "event_id": "evt-1", "content": "hello"}
+    )
+    session.summaries.append(
+        {
+            "summary_id": "sum-1",
+            "covered_event_ids": ["evt-1"],
+            "goal": "hello",
+        }
+    )
+
+    store.save(session)
+    reopened = store.open(locator={"id": session.session_id})
+
+    assert reopened.journal[0]["event_id"] == "evt-1"
+    assert reopened.evidence[0]["evidence_id"] == "evd-1"
+    assert reopened.summaries[0]["summary_id"] == "sum-1"
+
+
+def test_filesystem_store_projects_legacy_messages_into_layered_records(tmp_path):
+    session_dir = tmp_path / "sessions" / "session-a"
+    session_dir.mkdir(parents=True)
+    (session_dir / "meta.json").write_text('{"id": "session-a"}')
+    (session_dir / "messages.jsonl").write_text(
+        '{"role":"user","content":"show tree"}\n'
+    )
+
+    reopened = FileSystemSessionStore(root=tmp_path).open(locator={"id": "session-a"})
+
+    assert reopened.journal[0]["kind"] == "user_message"
+    assert reopened.evidence[0]["content"] == "show tree"
+
+
 def test_filesystem_store_persists_events_and_project_meta(tmp_path):
     workspace = tmp_path / "repo"
     workspace.mkdir()

@@ -3,6 +3,7 @@ import os
 import uuid
 from pathlib import Path
 
+from deep_coder.context.records import make_evidence_record, make_journal_entry
 from deep_coder.context.session import Session, derive_session_preview
 from deep_coder.context.stores.base import SessionStoreBase
 
@@ -39,10 +40,18 @@ class FileSystemSessionStore(SessionStoreBase):
         meta_path = session_dir / "meta.json"
         messages_path = session_dir / "messages.jsonl"
         events_path = session_dir / "events.jsonl"
+        journal_path = session_dir / "journal.jsonl"
+        evidence_path = session_dir / "evidence.jsonl"
+        summaries_path = session_dir / "summaries.jsonl"
+        artifacts_path = session_dir / "artifacts.json"
         strategy_name = "simple_history"
         strategy_state = {}
         messages = []
         events = []
+        journal = []
+        evidence = []
+        summaries = []
+        artifacts = {}
         project_key = self.project_key
         workspace_path = self.workspace_path
 
@@ -69,6 +78,29 @@ class FileSystemSessionStore(SessionStoreBase):
                 for line in events_path.read_text().splitlines()
                 if line.strip()
             ]
+        if journal_path.exists():
+            journal = [
+                json.loads(line)
+                for line in journal_path.read_text().splitlines()
+                if line.strip()
+            ]
+        if evidence_path.exists():
+            evidence = [
+                json.loads(line)
+                for line in evidence_path.read_text().splitlines()
+                if line.strip()
+            ]
+        if summaries_path.exists():
+            summaries = [
+                json.loads(line)
+                for line in summaries_path.read_text().splitlines()
+                if line.strip()
+            ]
+        if artifacts_path.exists():
+            artifacts = json.loads(artifacts_path.read_text())
+
+        if messages and not journal:
+            journal, evidence = _project_legacy_messages(messages)
 
         state_path = session_dir / "context" / strategy_name / "state.json"
         if state_path.exists():
@@ -80,6 +112,10 @@ class FileSystemSessionStore(SessionStoreBase):
             root=session_dir,
             messages=messages,
             events=events,
+            journal=journal,
+            evidence=evidence,
+            summaries=summaries,
+            artifacts=artifacts,
             next_task_id=task_state.get("next_task_id", 1),
             tasks=task_state.get("tasks", []),
             project_key=project_key,
@@ -108,6 +144,16 @@ class FileSystemSessionStore(SessionStoreBase):
                 session_dir / "events.jsonl": "".join(
                     json.dumps(event) + "\n" for event in session.events
                 ),
+                session_dir / "journal.jsonl": "".join(
+                    json.dumps(entry) + "\n" for entry in session.journal
+                ),
+                session_dir / "evidence.jsonl": "".join(
+                    json.dumps(record) + "\n" for record in session.evidence
+                ),
+                session_dir / "summaries.jsonl": "".join(
+                    json.dumps(record) + "\n" for record in session.summaries
+                ),
+                session_dir / "artifacts.json": json.dumps(session.artifacts, indent=2),
                 context_dir / "state.json": json.dumps(state, indent=2),
             }
         )
@@ -139,3 +185,38 @@ def _write_atomic_batch(paths_to_content: dict[Path, str]) -> None:
             if temp_path.exists():
                 temp_path.unlink()
         raise
+
+
+def _project_legacy_messages(messages: list[dict]) -> tuple[list[dict], list[dict]]:
+    journal = []
+    evidence = []
+    for index, message in enumerate(messages, start=1):
+        role = message.get("role", "assistant")
+        event_id = f"legacy-event-{index}"
+        kind = _legacy_kind_for_role(role)
+        journal.append(
+            make_journal_entry(
+                event_id=event_id,
+                turn_id=f"legacy-turn-{index}",
+                kind=kind,
+                role=role,
+                tool_name=message.get("name"),
+            )
+        )
+        evidence.append(
+            make_evidence_record(
+                evidence_id=f"legacy-evidence-{index}",
+                event_id=event_id,
+                role=role,
+                content=message.get("content", ""),
+            )
+        )
+    return journal, evidence
+
+
+def _legacy_kind_for_role(role: str) -> str:
+    if role == "user":
+        return "user_message"
+    if role == "tool":
+        return "tool_result"
+    return "assistant_message"

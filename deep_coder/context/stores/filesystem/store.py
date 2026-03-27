@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -93,19 +94,23 @@ class FileSystemSessionStore(SessionStoreBase):
         session_dir.mkdir(parents=True, exist_ok=True)
         context_dir.mkdir(parents=True, exist_ok=True)
 
-        (session_dir / "meta.json").write_text(json.dumps(session.meta(), indent=2))
-        (session_dir / "messages.jsonl").write_text(
-            "".join(json.dumps(message) + "\n" for message in session.messages)
-        )
-        (session_dir / "events.jsonl").write_text(
-            "".join(json.dumps(event) + "\n" for event in session.events)
-        )
         state = dict(session.strategy_state)
         state["task_system"] = {
             "next_task_id": session.next_task_id,
             "tasks": session.tasks,
         }
-        (context_dir / "state.json").write_text(json.dumps(state, indent=2))
+        _write_atomic_batch(
+            {
+                session_dir / "meta.json": json.dumps(session.meta(), indent=2),
+                session_dir / "messages.jsonl": "".join(
+                    json.dumps(message) + "\n" for message in session.messages
+                ),
+                session_dir / "events.jsonl": "".join(
+                    json.dumps(event) + "\n" for event in session.events
+                ),
+                context_dir / "state.json": json.dumps(state, indent=2),
+            }
+        )
 
     @staticmethod
     def _load_preview(messages_path: Path) -> str | None:
@@ -117,3 +122,20 @@ class FileSystemSessionStore(SessionStoreBase):
             if line.strip()
         ]
         return derive_session_preview(messages)
+
+
+def _write_atomic_batch(paths_to_content: dict[Path, str]) -> None:
+    temp_paths = {
+        path: path.with_name(f"{path.name}.tmp")
+        for path in paths_to_content
+    }
+    try:
+        for path, content in paths_to_content.items():
+            temp_paths[path].write_text(content)
+        for path, temp_path in temp_paths.items():
+            os.replace(temp_path, path)
+    except Exception:
+        for temp_path in temp_paths.values():
+            if temp_path.exists():
+                temp_path.unlink()
+        raise

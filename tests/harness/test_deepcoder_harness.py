@@ -1,3 +1,4 @@
+import threading
 from types import SimpleNamespace
 
 from deep_coder.context.manager import ContextManager
@@ -289,3 +290,135 @@ def test_harness_passes_active_session_to_tools_and_emits_task_snapshot(tmp_path
         "message_committed",
         "turn_finished",
     ]
+
+
+def test_harness_flushes_completed_tool_results_before_later_tool_finishes(tmp_path):
+    session_state = {}
+    second_tool_started = threading.Event()
+    release_second_tool = threading.Event()
+    thread_errors = []
+    result_holder = {}
+
+    class CapturingSink:
+        def emit(self, event):
+            session_state["session_id"] = event["session_id"]
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "read_file",
+                            "arguments": {"path": "README.md"},
+                        },
+                        {
+                            "id": "tool-2",
+                            "name": "read_file",
+                            "arguments": {"path": "NOTES.md"},
+                        },
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return [{"function": {"name": "read_file"}}]
+
+        def execute(self, name, arguments, session=None):
+            if arguments["path"] == "README.md":
+                return ToolExecutionResult(
+                    name=name,
+                    display_command="read_file README.md",
+                    model_output="first file",
+                    output_text="first file",
+                )
+            second_tool_started.set()
+            release_second_tool.wait(timeout=5)
+            return ToolExecutionResult(
+                name=name,
+                display_command="read_file NOTES.md",
+                model_output="second file",
+                output_text="second file",
+            )
+
+    prompt = DeepCoderPrompt(
+        config=SimpleNamespace(workdir=tmp_path),
+    )
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    def run_harness():
+        try:
+            result_holder["result"] = harness.run(
+                None,
+                "read both files",
+                event_sink=CapturingSink(),
+            )
+        except Exception as exc:  # pragma: no cover - test cleanup path
+            thread_errors.append(exc)
+            release_second_tool.set()
+
+    worker = threading.Thread(target=run_harness)
+    worker.start()
+    assert second_tool_started.wait(timeout=5) is True
+
+    try:
+        reopened = context.open(locator={"id": session_state["session_id"]})
+        assert reopened.messages == [
+            {"role": "user", "content": "read both files"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "tool-1",
+                        "name": "read_file",
+                        "arguments": {"path": "README.md"},
+                    },
+                    {
+                        "id": "tool-2",
+                        "name": "read_file",
+                        "arguments": {"path": "NOTES.md"},
+                    },
+                ],
+            },
+            {"role": "tool", "tool_call_id": "tool-1", "content": "first file"},
+        ]
+        assert [event["type"] for event in reopened.events] == [
+            "turn_started",
+            "message_committed",
+            "tool_called",
+            "tool_output",
+        ]
+    finally:
+        release_second_tool.set()
+        worker.join(timeout=5)
+
+    assert not thread_errors
+    assert worker.is_alive() is False
+    assert result_holder["result"].final_text == "done"

@@ -15,6 +15,7 @@ class DeepCoderHarness(HarnessBase):
 
     def _publish(self, session, event_sink, event: dict) -> None:
         session.events.append(event)
+        self.context.flush(session)
         event_sink.emit(event)
 
     def _event(self, session, turn_id: str, event_type: str, **payload) -> dict:
@@ -76,6 +77,7 @@ class DeepCoderHarness(HarnessBase):
                         "tool_calls": response["tool_calls"],
                     },
                 )
+                self.context.flush(session)
                 for tool_call in response["tool_calls"]:
                     output = self.tools.execute(
                         tool_call["name"],
@@ -142,7 +144,6 @@ class DeepCoderHarness(HarnessBase):
                                 **extra_event["payload"],
                             ),
                         )
-                self.context.flush(session)
                 continue
 
             assistant_text = response["content"] or ""
@@ -171,7 +172,6 @@ class DeepCoderHarness(HarnessBase):
                     finish_reason=response["finish_reason"],
                 ),
             )
-            self.context.flush(session)
             return HarnessResult(
                 final_text=assistant_text,
                 tool_results=tool_results,

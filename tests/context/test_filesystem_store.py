@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
 
@@ -140,3 +143,44 @@ def test_filesystem_store_persists_task_state(tmp_path):
 
     assert reopened.next_task_id == 3
     assert reopened.tasks[1]["subject"] == "edit app"
+
+
+def test_filesystem_store_save_is_atomic_when_write_fails(tmp_path, monkeypatch):
+    store = FileSystemSessionStore(root=tmp_path)
+    session = store.open()
+    session.append({"role": "user", "content": "before"})
+    session.events.append({"type": "turn_started", "turn_id": "turn-1"})
+    store.save(session)
+
+    session.append({"role": "assistant", "content": "after"})
+    session.events.append({"type": "message_committed", "role": "assistant", "text": "after"})
+
+    original_messages = (
+        tmp_path / "sessions" / session.session_id / "messages.jsonl"
+    ).read_text()
+    original_events = (
+        tmp_path / "sessions" / session.session_id / "events.jsonl"
+    ).read_text()
+
+    real_write_text = Path.write_text
+
+    def flaky_write(self, data, *args, **kwargs):
+        if self.name.startswith("events.jsonl"):
+            raise OSError("simulated write failure")
+        return real_write_text(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", flaky_write)
+
+    with pytest.raises(OSError, match="simulated write failure"):
+        store.save(session)
+
+    reopened = store.open(locator={"id": session.session_id})
+
+    assert reopened.messages == [{"role": "user", "content": "before"}]
+    assert reopened.events == [{"type": "turn_started", "turn_id": "turn-1"}]
+    assert (
+        tmp_path / "sessions" / session.session_id / "messages.jsonl"
+    ).read_text() == original_messages
+    assert (
+        tmp_path / "sessions" / session.session_id / "events.jsonl"
+    ).read_text() == original_events

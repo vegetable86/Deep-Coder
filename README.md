@@ -201,11 +201,11 @@ The authoritative implementation lives under `deep_coder/` plus the checked-in `
 Run the test suite with the project virtual environment:
 
 ```bash
-/home/wys/Deep-Coder/.venv/bin/pytest -q
+/home/dev/Deep-Coder/.venv/bin/pytest -q
 ```
 
 If you are modifying packaging or install behavior, also verify the editable install path:
 
 ```bash
-/home/wys/Deep-Coder/.venv/bin/python -m pip install -e .
+/home/dev/Deep-Coder/.venv/bin/python -m pip install -e .
 ```

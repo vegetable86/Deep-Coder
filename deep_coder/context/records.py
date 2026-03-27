@@ -38,9 +38,12 @@ def make_summary_record(
     summary_id: str,
     covered_event_ids: list[str],
     goal: str,
+    **metadata,
 ) -> dict:
-    return {
+    record = {
         "summary_id": summary_id,
         "covered_event_ids": covered_event_ids,
         "goal": goal,
     }
+    record.update(metadata)
+    return record

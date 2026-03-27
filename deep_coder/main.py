@@ -2,9 +2,10 @@ from pathlib import Path
 
 from deep_coder.config import RuntimeConfig
 from deep_coder.context.manager import ContextManager
+from deep_coder.context.summarizers.model import ModelSummarizer
 from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
-from deep_coder.context.strategies.simple_history.strategy import (
-    SimpleHistoryContextStrategy,
+from deep_coder.context.strategies.layered_history.strategy import (
+    LayeredHistoryContextStrategy,
 )
 from deep_coder.harness.deepcoder.harness import DeepCoderHarness
 from deep_coder.models.deepseek.model import DeepSeekModel
@@ -37,7 +38,10 @@ def build_runtime(
             project_key=config.project_key,
             workspace_path=config.project_path,
         ),
-        strategy=SimpleHistoryContextStrategy(),
+        strategy=LayeredHistoryContextStrategy(
+            config=config,
+            summarizer=ModelSummarizer(model=model, config=config),
+        ),
     )
     harness = DeepCoderHarness(
         config=config,

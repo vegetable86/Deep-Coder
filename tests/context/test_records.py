@@ -24,8 +24,10 @@ def test_record_helpers_capture_ids_and_provenance():
         summary_id="sum-1",
         covered_event_ids=["evt-1", "evt-2"],
         goal="inspect repository",
+        open_questions=["find cli entrypoint"],
     )
 
     assert journal["artifact_ids"] == ["art-1"]
     assert evidence["event_id"] == "evt-1"
     assert summary["covered_event_ids"] == ["evt-1", "evt-2"]
+    assert summary["open_questions"] == ["find cli entrypoint"]

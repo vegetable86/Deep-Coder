@@ -10,7 +10,8 @@ def test_build_runtime_returns_expected_components(monkeypatch, tmp_path):
     assert runtime["config"].workdir == tmp_path
     assert runtime["model"].manifest()["provider"] == "deepseek"
     assert runtime["prompt"].manifest()["name"] == "deepcoder"
-    assert runtime["context"].strategy.manifest()["name"] == "simple_history"
+    assert runtime["context"].strategy.manifest()["name"] == "layered_history"
+    assert runtime["context"].strategy.summarizer.model is runtime["model"]
     assert runtime["tools"].schemas()
 
 

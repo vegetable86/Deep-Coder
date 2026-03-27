@@ -117,20 +117,18 @@ def test_model_command_updates_runtime_and_registry(fake_runtime, fake_project):
     assert fake_runtime["registry"].default_model() == "deepseek-reasoner"
 
 
-def test_skills_command_activates_skill_for_session(fake_runtime, fake_project):
+def test_skills_command_completes_only_list_and_show_subcommands(fake_runtime, fake_project):
     registry = CommandRegistry.with_builtin_commands()
 
-    result = registry.execute(
-        "/skills use python-tests",
+    matches = registry.match(
+        "/skills ",
         runtime=fake_runtime,
         project=fake_project,
         session_id="session-a",
         turn_state="idle",
     )
 
-    session = fake_runtime["context"].open(locator={"id": "session-a"})
-    assert result.status_message == "skill active: python-tests"
-    assert session.active_skills[0]["name"] == "python-tests"
+    assert [match.name for match in matches] == ["list", "show"]
 
 
 def test_skills_command_lists_available_skills(fake_runtime, fake_project):
@@ -144,13 +142,8 @@ def test_skills_command_lists_available_skills(fake_runtime, fake_project):
         "Skill body.\n"
     )
 
-    registry.execute(
-        "/skills use python-tests",
-        runtime=fake_runtime,
-        project=fake_project,
-        session_id="session-a",
-        turn_state="idle",
-    )
+    session = fake_runtime["context"].open(locator={"id": "session-a"})
+    session.active_skills.append({"name": "python-tests"})
 
     result = registry.execute(
         "/skills",
@@ -166,3 +159,43 @@ def test_skills_command_lists_available_skills(fake_runtime, fake_project):
         ("javascript-tests", False),
         ("python-tests", True),
     ]
+
+
+def test_skills_show_returns_all_skills_for_browsing(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+    (fake_runtime["config"].skills_dir / "javascript-tests.md").write_text(
+        "---\n"
+        "name: javascript-tests\n"
+        "title: JavaScript Test Fixing\n"
+        "summary: Use when diagnosing jest failures.\n"
+        "---\n\n"
+        "JavaScript skill body.\n"
+    )
+
+    result = registry.execute(
+        "/skills show",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
+
+    assert result.list_kind == "skills_show"
+    assert [(item["name"], item["body"]) for item in result.list_items] == [
+        ("javascript-tests", "JavaScript skill body.\n"),
+        ("python-tests", "Skill body.\n"),
+    ]
+
+
+def test_skills_command_rejects_removed_use_subcommand(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+
+    result = registry.execute(
+        "/skills use python-tests",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id="session-a",
+        turn_state="idle",
+    )
+
+    assert result.warning_message == "unknown /skills subcommand: use"

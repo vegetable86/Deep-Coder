@@ -11,6 +11,7 @@ from textual.message import Message
 from textual.widgets import Static, TextArea
 
 from deep_coder.harness import start_turn_subprocess
+from deep_coder.skills.registry import SkillRegistry
 from deep_coder.tui.commands import CommandRegistry
 from deep_coder.tui.commands.parser import parse_command_text
 from deep_coder.tui.render import (
@@ -501,7 +502,15 @@ class DeepCodeApp(App):
         if result.list_kind == "sessions":
             self.push_screen(SessionSwitcher(result.list_items), self._on_session_selected)
         if result.list_kind == "skills":
-            self.push_screen(SkillListScreen(result.list_items))
+            self.push_screen(
+                SkillListScreen(
+                    result.list_items,
+                    mode="toggle",
+                    on_toggle=self._toggle_skill_from_list,
+                )
+            )
+        if result.list_kind == "skills_show":
+            self.push_screen(SkillListScreen(result.list_items, mode="browse"))
         if result.selected_session_id is not None:
             self.session_id = result.selected_session_id
         if result.reset_session:
@@ -558,6 +567,63 @@ class DeepCodeApp(App):
         session.events.append(event)
         self.runtime["context"].flush(session)
         self.emit(event)
+
+    def _toggle_skill_from_list(self, skill_name: str) -> bool:
+        context_manager = self.runtime["context"]
+        session = (
+            context_manager.open(locator={"id": self.session_id})
+            if self.session_id
+            else context_manager.open()
+        )
+        self.session_id = session.session_id
+
+        if context_manager.deactivate_skill(session, skill_name):
+            event = {
+                "type": "skill_dropped",
+                "session_id": session.session_id,
+                "turn_id": "command",
+                "name": skill_name,
+            }
+            session.events.append(event)
+            context_manager.flush(session)
+            self._command_feedback = f"skill removed: {skill_name}"
+            self.emit(event)
+            self._update_status_strip()
+            return False
+
+        registry = SkillRegistry(root=self.runtime["config"].skills_dir)
+        try:
+            skill = registry.load_skill(skill_name)
+        except FileNotFoundError:
+            event = {
+                "type": "skill_missing",
+                "session_id": session.session_id,
+                "turn_id": "command",
+                "name": skill_name,
+            }
+            session.events.append(event)
+            context_manager.flush(session)
+            self._command_feedback = f"skill not found: {skill_name}"
+            self.emit(event)
+            self._update_status_strip()
+            return False
+
+        record, _ = context_manager.activate_skill(session, skill, source="user")
+        event = {
+            "type": "skill_activated",
+            "session_id": session.session_id,
+            "turn_id": "command",
+            "name": record["name"],
+            "title": record["title"],
+            "source": record["source"],
+            "hash": record["hash"],
+        }
+        session.events.append(event)
+        context_manager.flush(session)
+        self._command_feedback = f"skill active: {skill_name}"
+        self.emit(event)
+        self._update_status_strip()
+        return True
 
     def _compose_timeline_renderable(self) -> RenderableType:
         if not self._timeline_blocks:

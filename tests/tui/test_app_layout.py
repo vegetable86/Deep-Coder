@@ -167,19 +167,43 @@ def test_busy_command_shows_warning_in_status_strip(fake_runtime, fake_project):
     asyncio.run(run())
 
 
-def test_skills_command_creates_session_and_activates_skill(fake_runtime, fake_project):
+def test_skills_list_toggles_skill_selection_with_enter(fake_runtime, fake_project):
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
         async with app.run_test(size=(120, 40)) as pilot:
             composer = app.query_one("#composer")
-            composer.text = "/skills use python-tests"
+            composer.text = "/skills"
             await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            overlay = app.screen.query_one("#skill-list")
+            labels = [option.prompt for option in overlay.options]
+            assert labels == [
+                "x python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+            ]
+
             await pilot.press("enter")
             await pilot.pause()
 
             assert app.session_id is not None
             session = fake_runtime["context"].open(locator={"id": app.session_id})
             assert session.active_skills[0]["name"] == "python-tests"
+
+            labels = [option.prompt for option in overlay.options]
+            assert labels == [
+                "√ python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+            ]
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            session = fake_runtime["context"].open(locator={"id": app.session_id})
+            assert session.active_skills == []
+            labels = [option.prompt for option in overlay.options]
+            assert labels == [
+                "x python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+            ]
 
     asyncio.run(run())
 
@@ -197,10 +221,9 @@ def test_skills_command_opens_skill_list_modal(fake_runtime, fake_project):
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
         async with app.run_test(size=(120, 40)) as pilot:
             composer = app.query_one("#composer")
-            composer.text = "/skills use python-tests"
-            await app.run_action("refresh_command_palette")
-            await pilot.press("enter")
-            await pilot.pause()
+            session = fake_runtime["context"].open(locator={"id": "session-a"})
+            session.active_skills.append({"name": "python-tests"})
+            app.load_session("session-a")
 
             composer.text = "/skills"
             await app.run_action("refresh_command_palette")
@@ -209,9 +232,44 @@ def test_skills_command_opens_skill_list_modal(fake_runtime, fake_project):
             overlay = app.screen.query_one("#skill-list")
             labels = [option.prompt for option in overlay.options]
             assert labels == [
-                "- javascript-tests  JavaScript Test Fixing  Use when diagnosing jest failures.",
-                "* python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+                "x javascript-tests  JavaScript Test Fixing  Use when diagnosing jest failures.",
+                "√ python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
             ]
+
+    asyncio.run(run())
+
+
+def test_skills_show_opens_browser_and_displays_skill_content(fake_runtime, fake_project):
+    async def run():
+        (fake_runtime["config"].skills_dir / "javascript-tests.md").write_text(
+            "---\n"
+            "name: javascript-tests\n"
+            "title: JavaScript Test Fixing\n"
+            "summary: Use when diagnosing jest failures.\n"
+            "---\n\n"
+            "JavaScript skill body.\n"
+        )
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "/skills show"
+            await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            overlay = app.screen.query_one("#skill-list")
+            labels = [option.prompt for option in overlay.options]
+            assert labels == [
+                "x javascript-tests  JavaScript Test Fixing  Use when diagnosing jest failures.",
+                "x python-tests  Python Test Fixing  Use when diagnosing pytest failures.",
+            ]
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            content = render_widget_text(app.screen.query_one("#skill-content"))
+            assert "JavaScript Test Fixing" in content
+            assert "JavaScript skill body." in content
 
     asyncio.run(run())
 

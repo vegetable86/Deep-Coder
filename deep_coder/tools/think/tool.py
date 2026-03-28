@@ -2,7 +2,7 @@ from pathlib import Path
 
 from deep_coder.models.deepseek.model import DeepSeekModel
 from deep_coder.tools.base import ToolBase
-from deep_coder.tools.result import ToolExecutionResult
+from deep_coder.tools.result import ToolExecutionResult, build_model_error_payload
 
 
 class ThinkTool(ToolBase):
@@ -12,13 +12,38 @@ class ThinkTool(ToolBase):
         self.model = model or DeepSeekModel(config=config)
 
     def exec(self, arguments: dict, session=None) -> ToolExecutionResult:
-        response = self.model.complete(
-            {
-                "model_name": "deepseek-reasoner",
-                "messages": [{"role": "user", "content": arguments["prompt"]}],
-                "tools": [],
-            }
-        )
+        try:
+            response = self.model.complete(
+                {
+                    "model_name": "deepseek-reasoner",
+                    "messages": [{"role": "user", "content": arguments["prompt"]}],
+                    "tools": [],
+                }
+            )
+        except Exception as exc:
+            error_text = f"error: {exc}"
+            return ToolExecutionResult(
+                name="think",
+                display_command="think",
+                model_output=error_text,
+                output_text=error_text,
+                metadata={
+                    "model_name": "deepseek-reasoner",
+                    "prompt": arguments["prompt"],
+                    "final_content": "",
+                },
+                is_error=True,
+                timeline_events=[
+                    {
+                        "type": "model_error",
+                        "payload": build_model_error_payload(
+                            "deepseek-reasoner",
+                            exc,
+                            scope="think_tool",
+                        ),
+                    }
+                ],
+            )
         final_content = response.get("content") or ""
         reasoning_content = response.get("reasoning_content") or ""
         return ToolExecutionResult(

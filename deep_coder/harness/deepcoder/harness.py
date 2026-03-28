@@ -4,6 +4,7 @@ from deep_coder.harness.base import HarnessBase
 from deep_coder.harness.events import NullHarnessEventSink
 from deep_coder.harness.result import HarnessResult
 from deep_coder.skills.registry import SkillRegistry
+from deep_coder.tools.result import build_model_error_payload
 
 
 class DeepCoderHarness(HarnessBase):
@@ -76,7 +77,40 @@ class DeepCoderHarness(HarnessBase):
                     ),
                 )
                 current_input = None
-            response = self.model.complete({"messages": messages, "tools": self.tools.schemas()})
+            try:
+                response = self.model.complete(
+                    {"messages": messages, "tools": self.tools.schemas()}
+                )
+            except Exception as exc:
+                self._publish(
+                    session,
+                    event_sink,
+                    self._event(
+                        session,
+                        turn_id,
+                        "model_error",
+                        **build_model_error_payload(
+                            self.config.model_name,
+                            exc,
+                            scope="main_model",
+                        ),
+                    ),
+                )
+                self._publish(
+                    session,
+                    event_sink,
+                    self._event(
+                        session,
+                        turn_id,
+                        "turn_failed",
+                        reason="model_error",
+                    ),
+                )
+                return HarnessResult(
+                    final_text="",
+                    tool_results=tool_results,
+                    session_id=session.session_id,
+                )
 
             if response["usage"]:
                 self._publish(
@@ -144,6 +178,23 @@ class DeepCoderHarness(HarnessBase):
                             is_error=output.is_error,
                         ),
                     )
+                    if output.reasoning_content:
+                        self._publish(
+                            session,
+                            event_sink,
+                            self._event(
+                                session,
+                                turn_id,
+                                "reasoning_recorded",
+                                tool_call_id=tool_call["id"],
+                                name=tool_call["name"],
+                                model_name=output.metadata.get(
+                                    "model_name", "deepseek-reasoner"
+                                ),
+                                final_content=output.metadata.get("final_content", ""),
+                                reasoning_content=output.reasoning_content,
+                            ),
+                        )
                     if output.diff_text:
                         self._publish(
                             session,

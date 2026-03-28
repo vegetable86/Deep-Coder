@@ -1,6 +1,8 @@
 import threading
 from types import SimpleNamespace
 
+import pytest
+
 from deep_coder.context.manager import ContextManager
 from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
 from deep_coder.context.strategies.layered_history.strategy import (
@@ -12,6 +14,7 @@ from deep_coder.context.strategies.simple_history.strategy import (
 from deep_coder.harness.deepcoder.harness import DeepCoderHarness
 from deep_coder.prompts.deepcoder.prompt import DeepCoderPrompt
 from deep_coder.tools.result import ToolExecutionResult
+from deep_coder.tools.think.tool import ThinkTool
 
 
 def test_harness_executes_tool_calls_until_final_answer(tmp_path):
@@ -199,6 +202,196 @@ def test_harness_emits_and_persists_timeline_events(tmp_path):
         "turn_finished",
     ]
     assert reopened.events == events
+
+
+def test_harness_emits_reasoning_recorded_for_think_results(tmp_path):
+    events = []
+
+    class CapturingSink:
+        def emit(self, event):
+            events.append(event)
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "think",
+                            "arguments": {"prompt": "plan the fix"},
+                        }
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class FakeTools:
+        def schemas(self):
+            return [{"function": {"name": "think"}}]
+
+        def execute(self, name, arguments, session=None):
+            return ToolExecutionResult(
+                name="think",
+                display_command="think",
+                model_output="[think result]",
+                output_text="ship it",
+                reasoning_content="step by step",
+                metadata={
+                    "model_name": "deepseek-reasoner",
+                    "final_content": "ship it",
+                },
+            )
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(model_name="deepseek-chat"),
+        model=FakeModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    harness.run(None, "plan it", event_sink=CapturingSink())
+
+    assert [event["type"] for event in events] == [
+        "turn_started",
+        "message_committed",
+        "tool_called",
+        "tool_output",
+        "reasoning_recorded",
+        "message_committed",
+        "turn_finished",
+    ]
+
+
+def test_harness_emits_model_error_and_finishes_turn_when_model_call_fails(tmp_path):
+    events = []
+
+    class CapturingSink:
+        def emit(self, event):
+            events.append(event)
+
+    class ExplodingModel:
+        def complete(self, request):
+            raise RuntimeError("boom")
+
+    class FakeTools:
+        def schemas(self):
+            return []
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(model_name="deepseek-chat"),
+        model=ExplodingModel(),
+        prompt=prompt,
+        context=context,
+        tools=FakeTools(),
+    )
+
+    try:
+        result = harness.run(None, "hello", event_sink=CapturingSink())
+    except RuntimeError as exc:  # pragma: no cover - current red path
+        pytest.fail(f"unexpected exception: {exc}")
+
+    assert result.final_text == ""
+    assert events[2]["type"] == "model_error"
+    assert events[-1]["type"] in {"turn_failed", "turn_finished"}
+
+
+def test_harness_forwards_model_error_event_from_think_tool_failures(tmp_path):
+    events = []
+
+    class CapturingSink:
+        def emit(self, event):
+            events.append(event)
+
+    class FakeRateLimitError(RuntimeError):
+        status_code = 429
+
+    class FailingReasoner:
+        def complete(self, request):
+            raise FakeRateLimitError("rate limit reached")
+
+    class OuterModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "think",
+                            "arguments": {"prompt": "plan the fix"},
+                        }
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            return {
+                "content": "done",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class ThinkOnlyTools:
+        def __init__(self):
+            self.tool = ThinkTool(
+                config=SimpleNamespace(),
+                workdir=tmp_path,
+                model=FailingReasoner(),
+            )
+
+        def schemas(self):
+            return [self.tool.schema()]
+
+        def execute(self, name, arguments, session=None):
+            return self.tool.exec(arguments, session=session)
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(model_name="deepseek-chat"),
+        model=OuterModel(),
+        prompt=prompt,
+        context=context,
+        tools=ThinkOnlyTools(),
+    )
+
+    harness.run(None, "think", event_sink=CapturingSink())
+
+    assert "model_error" in [event["type"] for event in events]
 
 
 def test_harness_passes_active_session_to_tools_and_emits_task_snapshot(tmp_path):

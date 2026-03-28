@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from deep_coder.context.records import make_evidence_record, make_journal_entry
 from deep_coder.context.session import Session
+from deep_coder.context.summarizers.model import ModelSummarizer
 from deep_coder.context.strategies.layered_history.strategy import (
     LayeredHistoryContextStrategy,
 )
@@ -29,6 +30,7 @@ def _config(**overrides):
         "context_recent_turns": 2,
         "context_compact_threshold": 4500,
         "context_summary_max_tokens": 1200,
+        "context_reasoning_max_chars": 4000,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -147,3 +149,114 @@ def test_layered_strategy_compacts_old_spans_when_budget_is_exceeded(tmp_path):
             "event_ids": ["evt-1", "evt-2"],
         }
     ]
+
+
+def test_layered_history_rebuilds_recent_think_result_from_artifact(tmp_path):
+    session = Session(session_id="s1", root=tmp_path)
+    entry = make_journal_entry(
+        event_id="evt-1",
+        turn_id="turn-1",
+        kind="tool_result",
+        role="tool",
+        tool_name="think",
+        artifact_ids=["art-1"],
+    )
+    evidence = make_evidence_record(
+        evidence_id="evd-1",
+        event_id="evt-1",
+        role="tool",
+        content="[think result]",
+        artifact_id="art-1",
+        tool_call_id="tool-1",
+    )
+    session.artifacts["art-1"] = {
+        "artifact_type": "think_result",
+        "metadata": {"final_content": "ship it"},
+        "reasoning_content": "step by step",
+    }
+    strategy = LayeredHistoryContextStrategy(
+        config=_config(),
+        summarizer=FakeSummarizer(),
+    )
+
+    message = strategy._message_for_entry(entry, evidence, session)
+
+    assert message["role"] == "tool"
+    assert "reasoning_trace" in message["content"]
+    assert "final_answer" in message["content"]
+
+
+def test_layered_history_truncates_reinjected_reasoning_trace(tmp_path):
+    full_reasoning_text = "1234567890" * 6
+    session = Session(session_id="s1", root=tmp_path)
+    entry = make_journal_entry(
+        event_id="evt-1",
+        turn_id="turn-1",
+        kind="tool_result",
+        role="tool",
+        tool_name="think",
+        artifact_ids=["art-1"],
+    )
+    evidence = make_evidence_record(
+        evidence_id="evd-1",
+        event_id="evt-1",
+        role="tool",
+        content="[think result]",
+        artifact_id="art-1",
+        tool_call_id="tool-1",
+    )
+    session.artifacts["art-1"] = {
+        "artifact_type": "think_result",
+        "metadata": {"final_content": "ship it"},
+        "reasoning_content": full_reasoning_text,
+    }
+    strategy = LayeredHistoryContextStrategy(
+        config=_config(context_reasoning_max_chars=20),
+        summarizer=FakeSummarizer(),
+    )
+
+    message = strategy._message_for_entry(entry, evidence, session)
+
+    assert len(message["content"]) < len(full_reasoning_text) + 40
+
+
+def test_model_summarizer_includes_think_content_in_transcript(tmp_path):
+    class FakeModel:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, request):
+            self.calls.append(request)
+            return {"content": '{"goal":"summarized prior context"}'}
+
+    fake_model = FakeModel()
+    summarizer = ModelSummarizer(model=fake_model, config=_config())
+    session = Session(session_id="s1", root=tmp_path)
+    entry = make_journal_entry(
+        event_id="evt-1",
+        turn_id="turn-1",
+        kind="tool_result",
+        role="tool",
+        tool_name="think",
+        artifact_ids=["art-1"],
+    )
+    session.evidence = [
+        make_evidence_record(
+            evidence_id="evd-1",
+            event_id="evt-1",
+            role="tool",
+            content="[think result]",
+            artifact_id="art-1",
+        )
+    ]
+    session.artifacts["art-1"] = {
+        "artifact_type": "think_result",
+        "metadata": {"final_content": "ship it"},
+        "reasoning_content": "step by step",
+    }
+
+    summarizer.summarize_span(session, [entry])
+
+    payload = fake_model.calls[0]["messages"][-1]["content"]
+
+    assert "reasoning_trace" in payload

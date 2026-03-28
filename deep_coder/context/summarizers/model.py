@@ -1,5 +1,8 @@
 import json
 
+from deep_coder.context.strategies.layered_history.strategy import (
+    _format_think_result_text,
+)
 from deep_coder.context.summarizers.base import SummarizerBase
 
 
@@ -15,6 +18,14 @@ class ModelSummarizer(SummarizerBase):
         transcript = []
         for entry in entries:
             evidence = evidence_by_event.get(entry["event_id"], {})
+            content = evidence.get("content", "")
+            if entry.get("tool_name") == "think":
+                artifact_id = next(iter(entry.get("artifact_ids", [])), None)
+                artifact = session.artifacts.get(artifact_id or "", {})
+                content = _format_think_result_text(
+                    final_content=artifact.get("metadata", {}).get("final_content", ""),
+                    reasoning_content=artifact.get("reasoning_content", ""),
+                )
             transcript.append(
                 {
                     "event_id": entry["event_id"],
@@ -22,7 +33,7 @@ class ModelSummarizer(SummarizerBase):
                     "role": entry["role"],
                     "kind": entry["kind"],
                     "tool_name": entry.get("tool_name"),
-                    "content": evidence.get("content", ""),
+                    "content": content,
                 }
             )
         response = self.model.complete(

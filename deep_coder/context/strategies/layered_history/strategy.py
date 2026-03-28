@@ -122,8 +122,7 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
             and not entry.get("summary_ids")
         ]
 
-    @staticmethod
-    def _message_for_entry(entry: dict, evidence: dict | None, session) -> dict | None:
+    def _message_for_entry(self, entry: dict, evidence: dict | None, session) -> dict | None:
         role = entry.get("role")
         if role in {"user", "assistant"} and entry["kind"] != "assistant_tool_call":
             content = (evidence or {}).get("content", "")
@@ -144,6 +143,21 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
         if role == "tool":
             artifact_id = next(iter(entry.get("artifact_ids", [])), None)
             artifact = session.artifacts.get(artifact_id or "", {})
+            if entry.get("tool_name") == "think":
+                reasoning = _truncate_reasoning(
+                    artifact.get("reasoning_content", ""),
+                    max_chars=self.config.context_reasoning_max_chars,
+                )
+                return {
+                    "role": "tool",
+                    "tool_call_id": (evidence or {}).get("tool_call_id"),
+                    "content": _format_think_result_text(
+                        final_content=artifact.get("metadata", {}).get(
+                            "final_content", ""
+                        ),
+                        reasoning_content=reasoning,
+                    ),
+                }
             return {
                 "role": "tool",
                 "tool_call_id": (evidence or {}).get("tool_call_id"),
@@ -154,3 +168,26 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
     @staticmethod
     def _next_id(prefix: str) -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def _format_think_result_text(final_content: str, reasoning_content: str) -> str:
+    return "\n".join(
+        [
+            "[think result]",
+            "final_answer:",
+            final_content,
+            "",
+            "reasoning_trace:",
+            reasoning_content,
+        ]
+    )
+
+
+def _truncate_reasoning(reasoning_content: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    if len(reasoning_content) <= max_chars:
+        return reasoning_content
+    if max_chars <= 3:
+        return reasoning_content[:max_chars]
+    return f"{reasoning_content[: max_chars - 3]}..."

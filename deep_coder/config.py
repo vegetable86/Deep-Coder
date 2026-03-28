@@ -8,6 +8,7 @@ DEFAULT_CONTEXT_SETTINGS = {
     "context_working_token_budget": 6000,
     "context_compact_threshold": 4500,
     "context_summary_max_tokens": 1200,
+    "context_reasoning_max_chars": 4000,
 }
 
 
@@ -27,6 +28,7 @@ class RuntimeConfig:
     context_working_token_budget: int
     context_compact_threshold: int
     context_summary_max_tokens: int
+    context_reasoning_max_chars: int
 
     @property
     def skills_dir(self) -> Path:
@@ -60,6 +62,7 @@ class RuntimeConfig:
             context_working_token_budget=context_values["context_working_token_budget"],
             context_compact_threshold=context_values["context_compact_threshold"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
+            context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
         )
 
     @classmethod
@@ -87,6 +90,7 @@ class RuntimeConfig:
             context_working_token_budget=context_values["context_working_token_budget"],
             context_compact_threshold=context_values["context_compact_threshold"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
+            context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
         )
 
 

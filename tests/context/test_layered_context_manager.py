@@ -66,3 +66,34 @@ def test_context_manager_records_tool_result_from_tool_execution_result(tmp_path
 
     assert session.artifacts
     assert session.evidence[-1]["content"] == "large output"
+
+
+def test_context_manager_persists_reasoning_content_inside_tool_artifact(tmp_path):
+    manager = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    session = manager.open()
+
+    manager.record_tool_result(
+        session,
+        turn_id="turn-1",
+        tool_call={
+            "id": "tool-1",
+            "name": "think",
+            "arguments": {"prompt": "plan the fix"},
+        },
+        output=ToolExecutionResult(
+            name="think",
+            display_command="think",
+            model_output="[think result]",
+            output_text="ship it",
+            reasoning_content="cot",
+            metadata={"final_content": "ship it"},
+        ),
+    )
+
+    artifact = next(iter(session.artifacts.values()))
+
+    assert artifact["reasoning_content"] == "cot"
+    assert artifact["artifact_type"] == "think_result"

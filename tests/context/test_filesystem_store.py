@@ -3,8 +3,13 @@ from pathlib import Path
 
 import pytest
 
+from deep_coder.context.manager import ContextManager
 from deep_coder.context.session import Session
 from deep_coder.context.stores.filesystem.store import FileSystemSessionStore
+from deep_coder.context.strategies.simple_history.strategy import (
+    SimpleHistoryContextStrategy,
+)
+from deep_coder.tools.result import ToolExecutionResult
 
 
 def test_filesystem_store_creates_and_lists_sessions(tmp_path):
@@ -200,6 +205,39 @@ def test_filesystem_store_round_trips_active_skills(tmp_path):
     reloaded = store.open(locator={"id": "session-a"})
 
     assert reloaded.active_skills[0]["source"] == "model"
+
+
+def test_filesystem_store_round_trips_reasoning_artifacts(tmp_path):
+    store = FileSystemSessionStore(root=tmp_path)
+    manager = ContextManager(
+        store=store,
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    session = manager.open()
+
+    manager.record_tool_result(
+        session,
+        turn_id="turn-1",
+        tool_call={
+            "id": "tool-1",
+            "name": "think",
+            "arguments": {"prompt": "plan the fix"},
+        },
+        output=ToolExecutionResult(
+            name="think",
+            display_command="think",
+            model_output="[think result]",
+            output_text="ship it",
+            reasoning_content="cot",
+            metadata={"final_content": "ship it"},
+        ),
+    )
+    store.save(session)
+
+    reopened = store.open(locator={"id": session.session_id})
+    artifact = next(iter(reopened.artifacts.values()))
+
+    assert artifact["reasoning_content"] == "cot"
 
 
 def test_session_meta_includes_active_skills(tmp_path):

@@ -98,6 +98,8 @@ class ContextManager:
         arguments: dict | None = None,
         model_output: str | None = None,
         output_text: str | None = None,
+        reasoning_content: str | None = None,
+        metadata: dict | None = None,
     ) -> None:
         if tool_call is not None:
             tool_call_id = tool_call.get("id")
@@ -106,6 +108,8 @@ class ContextManager:
         if output is not None:
             model_output = output.model_output
             output_text = output.output_text
+            reasoning_content = output.reasoning_content
+            metadata = dict(output.metadata)
             if tool_name is None:
                 tool_name = output.name
         artifact_id = self._next_id("art")
@@ -116,11 +120,14 @@ class ContextManager:
         }
         self._append_message(session, message)
         session.artifacts[artifact_id] = {
+            "artifact_type": "think_result" if tool_name == "think" else "tool_result",
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
             "arguments": arguments or {},
             "model_output": model_output or "",
             "output_text": output_text or model_output or "",
+            "reasoning_content": reasoning_content or "",
+            "metadata": metadata or {},
             "display_command": getattr(output, "display_command", None),
             "diff_text": getattr(output, "diff_text", None),
             "is_error": getattr(output, "is_error", False),
@@ -140,8 +147,8 @@ class ContextManager:
             role="tool",
             content=model_output or "",
             artifact_id=artifact_id,
+            tool_call_id=tool_call_id,
         )
-        evidence["tool_call_id"] = tool_call_id
         session.journal.append(journal)
         session.evidence.append(evidence)
 

@@ -24,14 +24,17 @@ def make_evidence_record(
     role: str,
     content: str,
     artifact_id: str | None = None,
+    **metadata,
 ) -> dict:
-    return {
+    record = {
         "evidence_id": evidence_id,
         "event_id": event_id,
         "role": role,
         "content": content,
         "artifact_id": artifact_id,
     }
+    record.update(metadata)
+    return record
 
 
 def make_summary_record(

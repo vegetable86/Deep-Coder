@@ -18,6 +18,8 @@ from deep_coder.tui.render import (
     render_context_compaction_block,
     render_diff_block,
     render_message_block,
+    render_model_error_block,
+    render_reasoning_block,
     render_skill_event_block,
     render_task_snapshot_block,
     render_turn_interrupted_block,
@@ -436,7 +438,7 @@ class DeepCodeApp(App):
             self._turn_state = "compacting"
         elif event_type == "context_compacted" and self._turn_state == "compacting":
             self._turn_state = "running"
-        elif event_type in {"turn_finished", "turn_interrupted"}:
+        elif event_type in {"turn_finished", "turn_interrupted", "turn_failed"}:
             self._turn_state = "idle"
 
         follow_tail = self._timeline_is_at_end()
@@ -456,6 +458,10 @@ class DeepCodeApp(App):
             block = render_diff_block(event.get("path") or event["name"], event["diff_text"])
         elif event_type == "usage_reported":
             block = render_usage_block(event)
+        elif event_type == "reasoning_recorded":
+            block = render_reasoning_block(event)
+        elif event_type == "model_error":
+            block = render_model_error_block(event)
         elif event_type == "task_snapshot":
             block = render_task_snapshot_block(event)
         elif event_type == "turn_interrupted":

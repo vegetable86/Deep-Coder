@@ -249,6 +249,67 @@ def test_live_skill_events_render_inline_in_timeline(fake_runtime, fake_project)
     asyncio.run(run())
 
 
+def test_live_reasoning_and_model_error_events_render_and_turn_failed_resets_status(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "turn_started",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                }
+            )
+            app.emit(
+                {
+                    "type": "reasoning_recorded",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "tool_call_id": "tool-1",
+                    "name": "think",
+                    "model_name": "deepseek-reasoner",
+                    "final_content": "answer",
+                    "reasoning_content": "cot",
+                }
+            )
+            app.emit(
+                {
+                    "type": "model_error",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "scope": "think_tool",
+                    "model_name": "deepseek-reasoner",
+                    "status_code": 429,
+                    "message": "rate limit reached",
+                    "retryable": True,
+                    "error_type": "RateLimitError",
+                }
+            )
+            app.emit(
+                {
+                    "type": "turn_failed",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "reason": "model_error",
+                }
+            )
+            await asyncio.sleep(0)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            status_text = render_widget_text(app.query_one("#status-strip"))
+            assert "deepseek-reasoner" in timeline_text
+            assert "answer" in timeline_text
+            assert "cot" in timeline_text
+            assert "rate limit reached" in timeline_text
+            assert "retryable" in timeline_text.lower()
+            assert "idle" in status_text.lower()
+
+    asyncio.run(run())
+
+
 def test_interrupted_turn_renders_marker_without_final_assistant_message(
     fake_runtime,
     fake_project,

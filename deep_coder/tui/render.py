@@ -41,6 +41,41 @@ def render_usage_block(usage: dict) -> Text:
     )
 
 
+def render_reasoning_block(event: dict) -> RenderableType:
+    lines = [
+        f"model: {event.get('model_name', 'deepseek-reasoner')}",
+        "final_answer:",
+        event.get("final_content", ""),
+        "",
+        "reasoning_trace:",
+        event.get("reasoning_content", ""),
+    ]
+    return Panel(
+        Text("\n".join(lines)),
+        border_style="cyan",
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def render_model_error_block(event: dict) -> RenderableType:
+    lines = [
+        f"model error: {event.get('model_name', 'unknown')}",
+    ]
+    if event.get("scope"):
+        lines.append(f"scope: {event['scope']}")
+    if event.get("status_code") is not None:
+        lines.append(f"status: {event['status_code']}")
+    lines.append(f"retryable: {'yes' if event.get('retryable') else 'no'}")
+    lines.append(f"message: {event.get('message', '')}")
+    return Panel(
+        Text("\n".join(lines)),
+        border_style="yellow" if event.get("retryable") else "red",
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def render_task_snapshot_block(event: dict) -> RenderableType:
     marker_by_status = {
         "pending": "[ ]",

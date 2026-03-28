@@ -1,6 +1,8 @@
 from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
+    render_model_error_block,
+    render_reasoning_block,
     render_task_snapshot_block,
     render_turn_interrupted_block,
     render_tool_output,
@@ -108,3 +110,31 @@ def test_render_turn_interrupted_block():
     block = render_turn_interrupted_block({"reason": "user_interrupt"})
 
     assert "interrupted" in render_plain_text(block).lower()
+
+
+def test_render_reasoning_block_shows_model_name_and_trace():
+    block = render_reasoning_block(
+        {
+            "model_name": "deepseek-reasoner",
+            "final_content": "answer",
+            "reasoning_content": "cot",
+        }
+    )
+    text = render_plain_text(block)
+
+    assert "deepseek-reasoner" in text
+    assert "answer" in text
+    assert "cot" in text
+
+
+def test_render_model_error_block_shows_retryability():
+    block = render_model_error_block(
+        {
+            "model_name": "deepseek-reasoner",
+            "status_code": 429,
+            "message": "rate limit reached",
+            "retryable": True,
+        }
+    )
+
+    assert "retryable" in render_plain_text(block).lower()

@@ -6,7 +6,6 @@ import json
 
 
 PRIORITY_PATTERNS = (
-    "DEEP.md",
     "README*",
     "CONTRIBUTING*",
     "docs/**",
@@ -95,13 +94,24 @@ def _render_generated_block(discovery: DiscoveryResult) -> str:
     for source in discovery.sources:
         lines.append(f"- `{source.relative_path}` ({source.category})")
     
+    # Add sections from design
     lines.extend([
         "",
-        "## Human Notes",
+        "## Start Here",
         "",
-        "Add your project-specific notes, conventions, and reminders below.",
-        "This section is preserved across `/init` refreshes.",
+        "TODO: Identify main entrypoints and launch flow",
         "",
+        "## Common Edits",
+        "",
+        "TODO: Map common edit locations based on source patterns",
+        "",
+        "## Verification",
+        "",
+        "TODO: Add verification commands from build/test config",
+        "",
+        "## Boundaries",
+        "",
+        "TODO: Note paths to avoid or legacy references",
     ])
     
     return "\n".join(lines)
@@ -109,19 +119,22 @@ def _render_generated_block(discovery: DiscoveryResult) -> str:
 
 def _merge_generated_block(existing_content: str, generated_block: str) -> str:
     if not existing_content.strip():
-        return f"{START_MARKER}\n{generated_block}\n{END_MARKER}\n"
+        return f"{START_MARKER}\n{generated_block}\n{END_MARKER}\n\n## Human Notes\n\nAdd your project-specific notes, conventions, and reminders below.\nThis section is preserved across `/init` refreshes.\n"
     
     start_idx = existing_content.find(START_MARKER)
     end_idx = existing_content.find(END_MARKER)
     
     if start_idx == -1 or end_idx == -1:
-        return f"{START_MARKER}\n{generated_block}\n{END_MARKER}\n\n{existing_content}"
+        # No markers found, append generated block and human notes section
+        human_notes_section = "\n\n## Human Notes\n\nAdd your project-specific notes, conventions, and reminders below.\nThis section is preserved across `/init` refreshes.\n"
+        return f"{START_MARKER}\n{generated_block}\n{END_MARKER}{human_notes_section}\n{existing_content}"
     
     end_idx += len(END_MARKER)
     
     before = existing_content[:start_idx]
     after = existing_content[end_idx:]
     
+    # Keep everything after the markers (including human notes)
     return f"{before}{START_MARKER}\n{generated_block}\n{END_MARKER}{after}"
 
 

@@ -153,6 +153,117 @@ def test_deepseek_complete_serializes_assistant_tool_calls(monkeypatch, tmp_path
     }
 
 
+def test_deepseek_complete_uses_request_level_model_override(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeResponse:
+        choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type("Msg", (), {"content": "done", "tool_calls": []})(),
+                    "finish_reason": "stop",
+                },
+            )()
+        ]
+        usage = None
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    model = DeepSeekModel(config=RuntimeConfig.from_env(workdir=tmp_path))
+    model.client = type(
+        "Client",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+
+    model.complete(
+        {
+            "model_name": "deepseek-reasoner",
+            "messages": [{"role": "user", "content": "think"}],
+        }
+    )
+
+    assert captured["model"] == "deepseek-reasoner"
+
+
+def test_deepseek_complete_normalizes_reasoning_content_and_reasoning_tokens(
+    monkeypatch, tmp_path
+):
+    class FakeUsage:
+        def model_dump(self):
+            return {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "prompt_cache_hit_tokens": 3,
+                "prompt_cache_miss_tokens": 7,
+                "reasoning_tokens": 11,
+            }
+
+    class FakeResponse:
+        choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Msg",
+                        (),
+                        {
+                            "content": "answer",
+                            "reasoning_content": "step by step",
+                            "tool_calls": [],
+                        },
+                    )(),
+                    "finish_reason": "stop",
+                },
+            )()
+        ]
+        usage = FakeUsage()
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    model = DeepSeekModel(config=RuntimeConfig.from_env(workdir=tmp_path))
+    model.client = type(
+        "Client",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(lambda **_: FakeResponse())},
+                    )()
+                },
+            )()
+        },
+    )()
+
+    response = model.complete({"messages": [{"role": "user", "content": "think"}]})
+
+    assert response["reasoning_content"] == "step by step"
+    assert response["usage"]["reasoning_tokens"] == 11
+
+
 def test_deepseek_list_models_returns_model_ids(monkeypatch, tmp_path):
     class FakeModelItem:
         def __init__(self, model_id):

@@ -21,7 +21,7 @@ class DeepSeekModel(ModelBase):
 
     def complete(self, request: dict) -> dict:
         response = self.client.chat.completions.create(
-            model=self.config.model_name,
+            model=request.get("model_name") or self.config.model_name,
             messages=_serialize_messages(request["messages"]),
             tools=request.get("tools"),
         )
@@ -39,6 +39,7 @@ class DeepSeekModel(ModelBase):
         usage_raw = response.usage.model_dump() if response.usage else {}
         return {
             "content": message.content,
+            "reasoning_content": getattr(message, "reasoning_content", None),
             "tool_calls": tool_calls,
             "usage": {
                 "prompt_tokens": usage_raw.get("prompt_tokens", 0),
@@ -46,6 +47,7 @@ class DeepSeekModel(ModelBase):
                 "total_tokens": usage_raw.get("total_tokens", 0),
                 "cache_hit_tokens": usage_raw.get("prompt_cache_hit_tokens", 0),
                 "cache_miss_tokens": usage_raw.get("prompt_cache_miss_tokens", 0),
+                "reasoning_tokens": usage_raw.get("reasoning_tokens", 0),
             },
             "finish_reason": response.choices[0].finish_reason,
             "raw_response": response,

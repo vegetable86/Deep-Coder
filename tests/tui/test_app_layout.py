@@ -39,7 +39,7 @@ def test_slash_opens_command_palette_and_filters_matches(fake_runtime, fake_proj
             await app.run_action("refresh_command_palette")
             palette = app.query_one("#command-palette")
             labels = [option.prompt for option in palette.options]
-            assert labels == ["/exit", "/history", "/model", "/session", "/skills"]
+            assert labels == ["/exit", "/history", "/init", "/model", "/session", "/skills"]
 
             composer.text = "/hi"
             await app.run_action("refresh_command_palette")
@@ -70,7 +70,7 @@ def test_typing_slash_opens_command_palette(fake_runtime, fake_project):
             await pilot.pause()
             palette = app.query_one("#command-palette")
             labels = [option.prompt for option in palette.options]
-            assert labels == ["/exit", "/history", "/model", "/session", "/skills"]
+            assert labels == ["/exit", "/history", "/init", "/model", "/session", "/skills"]
             assert palette.display is True
 
     asyncio.run(run())
@@ -399,5 +399,37 @@ def test_next_prompt_after_session_command_uses_new_session_locator(fake_runtime
             assert fake_runtime["turn_starter"].calls[-1]["session_id"] is None
             assert fake_runtime["turn_starter"].calls[-1]["user_input"] == "follow up"
             assert app.session_id == "session-new-1"
+
+    asyncio.run(run())
+
+
+def test_slash_palette_lists_init_command(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            composer = app.query_one("#composer")
+            composer.text = "/"
+            await app.run_action("refresh_command_palette")
+            palette = app.query_one("#command-palette")
+            labels = [option.prompt for option in palette.options]
+            assert "/init" in labels
+
+    asyncio.run(run())
+
+
+def test_init_command_updates_status_strip_and_writes_file(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        (fake_project.path / "README.md").write_text("# Demo\n")
+
+        async with app.run_test(size=(120, 40)) as pilot:
+            composer = app.query_one("#composer")
+            composer.text = "/init"
+            await app.run_action("refresh_command_palette")
+            await pilot.press("enter")
+
+            status = render_widget_text(app.query_one("#status-strip"))
+            assert "DEEP.md refreshed" in status
+            assert (fake_project.path / "DEEP.md").exists()
 
     asyncio.run(run())

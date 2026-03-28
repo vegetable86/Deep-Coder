@@ -15,6 +15,7 @@ from deep_coder.tools.tasks.tool import (
     TaskListTool,
     TaskUpdateTool,
 )
+from deep_coder.tools.think.tool import ThinkTool
 from deep_coder.tools.write_file.tool import WriteFileTool
 
 
@@ -31,6 +32,7 @@ class ToolRegistry:
                 ReadFileTool(config=config, workdir=workdir),
                 WriteFileTool(config=config, workdir=workdir),
                 EditFileTool(config=config, workdir=workdir),
+                ThinkTool(config=config, workdir=workdir),
                 TaskCreateTool(config=config, workdir=workdir),
                 TaskUpdateTool(config=config, workdir=workdir),
                 TaskListTool(config=config, workdir=workdir),
@@ -122,6 +124,8 @@ def _normalize_result(
             model_output=output.model_output,
             output_text=output.output_text,
             diff_text=output.diff_text if output.diff_text is not None else diff_text,
+            reasoning_content=output.reasoning_content,
+            metadata=dict(output.metadata),
             is_error=output.is_error,
             timeline_events=_normalize_timeline_events(output.timeline_events),
         )
@@ -131,6 +135,7 @@ def _normalize_result(
         model_output=output,
         output_text=output,
         diff_text=diff_text,
+        metadata={},
         is_error=output.startswith("error:"),
     )
 

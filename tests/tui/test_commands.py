@@ -26,6 +26,14 @@ def test_registry_lists_skills_command():
     assert "skills" in [match.name for match in matches]
 
 
+def test_registry_lists_init_command():
+    registry = CommandRegistry.with_builtin_commands()
+
+    matches = registry.match("/")
+
+    assert "init" in [match.name for match in matches]
+
+
 def test_session_command_returns_reset_action(fake_runtime, fake_project):
     registry = CommandRegistry.with_builtin_commands()
 
@@ -199,3 +207,39 @@ def test_skills_command_rejects_removed_use_subcommand(fake_runtime, fake_projec
     )
 
     assert result.warning_message == "unknown /skills subcommand: use"
+
+
+def test_init_command_refreshes_deep_file(fake_runtime, fake_project):
+    registry = CommandRegistry.with_builtin_commands()
+    (fake_project.path / "README.md").write_text("# Demo\n")
+
+    result = registry.execute(
+        "/init",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id=None,
+        turn_state="idle",
+    )
+
+    assert result.warning_message is None
+    assert result.status_message == "DEEP.md refreshed"
+    assert (fake_project.path / "DEEP.md").exists()
+
+
+def test_init_command_warns_when_generation_fails(fake_runtime, fake_project, monkeypatch):
+    registry = CommandRegistry.with_builtin_commands()
+
+    def raise_error(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("deep_coder.tui.commands.builtin.init.DeepFileService.refresh", raise_error)
+
+    result = registry.execute(
+        "/init",
+        runtime=fake_runtime,
+        project=fake_project,
+        session_id=None,
+        turn_state="idle",
+    )
+
+    assert result.warning_message == "failed to refresh DEEP.md: boom"

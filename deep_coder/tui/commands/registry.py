@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from deep_coder.tui.commands.base import CommandContext, CommandResult, RUNTIME_BUSY_WARNING
 from deep_coder.tui.commands.builtin.exit import ExitCommand
 from deep_coder.tui.commands.builtin.history import HistoryCommand
+from deep_coder.tui.commands.builtin.init import InitCommand
 from deep_coder.tui.commands.builtin.model import ModelCommand
 from deep_coder.tui.commands.builtin.session import SessionCommand
 from deep_coder.tui.commands.builtin.skills import SkillsCommand
@@ -16,7 +17,14 @@ class CommandRegistry:
     @classmethod
     def with_builtin_commands(cls):
         return cls(
-            [ModelCommand(), HistoryCommand(), SessionCommand(), SkillsCommand(), ExitCommand()]
+            [
+                InitCommand(),
+                ModelCommand(),
+                HistoryCommand(),
+                SessionCommand(),
+                SkillsCommand(),
+                ExitCommand(),
+            ]
         )
 
     def match(self, composer_text: str, **context_kwargs) -> list:

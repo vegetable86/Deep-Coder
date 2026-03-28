@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from deep_coder.projects.deepfile import DeepFileService
 
@@ -56,3 +57,59 @@ def test_discover_sources_stays_inside_active_workspace(tmp_path):
     result = service.discover_sources()
 
     assert [source.relative_path for source in result.sources] == ["README.md"]
+
+
+def test_refresh_writes_generated_block_and_human_notes_scaffold(tmp_path):
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "README.md").write_text("# Demo\n")
+
+    service = DeepFileService(
+        workspace=workspace,
+        state_dir=tmp_path / ".deepcode" / "projects" / "demo",
+    )
+
+    result = service.refresh()
+
+    deep_file = (workspace / "DEEP.md").read_text()
+    assert "<!-- deepcode:init:start -->" in deep_file
+    assert "## Human Notes" in deep_file
+    assert result.changed is True
+
+
+def test_refresh_replaces_only_generated_block(tmp_path):
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "README.md").write_text("# Demo\n")
+    (workspace / "DEEP.md").write_text(
+        "# DEEP.md\n\n"
+        "<!-- deepcode:init:start -->\nold block\n<!-- deepcode:init:end -->\n\n"
+        "## Human Notes\nkeep me\n"
+    )
+
+    service = DeepFileService(
+        workspace=workspace,
+        state_dir=tmp_path / ".deepcode" / "projects" / "demo",
+    )
+
+    service.refresh()
+
+    deep_file = (workspace / "DEEP.md").read_text()
+    assert "old block" not in deep_file
+    assert "keep me" in deep_file
+
+
+def test_refresh_persists_init_metadata(tmp_path):
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "README.md").write_text("# Demo\n")
+
+    state_dir = tmp_path / ".deepcode" / "projects" / "demo"
+    service = DeepFileService(workspace=workspace, state_dir=state_dir)
+
+    service.refresh()
+
+    payload = json.loads((state_dir / "deep" / "init-state.json").read_text())
+    assert payload["workspace_path"] == str(workspace)
+    assert payload["deep_file_path"] == str(workspace / "DEEP.md")
+    assert "README.md" in payload["sources"]

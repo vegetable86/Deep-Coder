@@ -1,4 +1,7 @@
+import json
+import queue
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +15,9 @@ from deep_coder.context.strategies.simple_history.strategy import (
     SimpleHistoryContextStrategy,
 )
 from deep_coder.harness.deepcoder.harness import DeepCoderHarness
+from deep_coder.harness.turn_runner import JsonLineEventSink
 from deep_coder.prompts.deepcoder.prompt import DeepCoderPrompt
+from deep_coder.tools.ask_user.tool import AskUserTool
 from deep_coder.tools.result import ToolExecutionResult
 from deep_coder.tools.think.tool import ThinkTool
 
@@ -841,3 +846,154 @@ def test_harness_injects_skill_index_and_active_skill_bodies(tmp_path):
     assert captured_messages[2]["role"] == "system"
     assert "Python Test Fixing" in captured_messages[2]["content"]
     assert "Reproduce the failing pytest command first." in captured_messages[2]["content"]
+
+
+def test_harness_allows_ask_user_tool_to_pause_and_resume(tmp_path, monkeypatch):
+    class BlockingLineInput:
+        def __init__(self):
+            self._lines = queue.Queue()
+
+        def push_line(self, line: str) -> None:
+            self._lines.put(line)
+
+        def readline(self) -> str:
+            return self._lines.get(timeout=5)
+
+    class CapturingLineOutput:
+        def __init__(self):
+            self._buffer = ""
+            self.lines: list[str] = []
+            self._lock = threading.Lock()
+
+        def write(self, text: str) -> None:
+            with self._lock:
+                self._buffer += text
+                while "\n" in self._buffer:
+                    line, self._buffer = self._buffer.split("\n", 1)
+                    self.lines.append(line)
+
+        def flush(self) -> None:
+            return None
+
+        def wait_for_event(self, event_type: str, timeout: float = 5) -> dict:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                with self._lock:
+                    for line in self.lines:
+                        payload = json.loads(line)
+                        if payload.get("type") == event_type:
+                            return payload
+                time.sleep(0.01)
+            raise TimeoutError(f"timed out waiting for {event_type}")
+
+    class AskUserModel:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "name": "ask_user",
+                            "arguments": {
+                                "questions": [
+                                    {
+                                        "question": "Which approach should I use?",
+                                        "options": [
+                                            {
+                                                "label": "Option A",
+                                                "description": "Fast but less accurate",
+                                            },
+                                            {
+                                                "label": "Option B",
+                                                "description": "Slower but more accurate",
+                                            },
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                    "usage": None,
+                    "finish_reason": "tool_calls",
+                    "raw_response": None,
+                }
+            assert json.loads(request["messages"][-1]["content"]) == {
+                "Which approach should I use?": "Option B"
+            }
+            return {
+                "content": "Using Option B",
+                "tool_calls": [],
+                "usage": None,
+                "finish_reason": "stop",
+                "raw_response": None,
+            }
+
+    class AskUserOnlyTools:
+        def __init__(self):
+            self._tool = AskUserTool(config=SimpleNamespace(), workdir=tmp_path)
+
+        def schemas(self):
+            return [self._tool.schema()]
+
+        def execute(self, name, arguments, session=None):
+            return self._tool.exec(arguments, session=session)
+
+    prompt = DeepCoderPrompt(config=SimpleNamespace(workdir=tmp_path))
+    context = ContextManager(
+        store=FileSystemSessionStore(root=tmp_path),
+        strategy=SimpleHistoryContextStrategy(),
+    )
+    harness = DeepCoderHarness(
+        config=SimpleNamespace(model_name="deepseek-chat"),
+        model=AskUserModel(),
+        prompt=prompt,
+        context=context,
+        tools=AskUserOnlyTools(),
+    )
+    fake_stdin = BlockingLineInput()
+    fake_stdout = CapturingLineOutput()
+    monkeypatch.setattr("sys.stdin", fake_stdin)
+    monkeypatch.setattr("sys.stdout", fake_stdout)
+
+    result_holder = {}
+    errors = []
+
+    def run_harness():
+        try:
+            result_holder["result"] = harness.run(
+                None,
+                "help me choose",
+                event_sink=JsonLineEventSink(fake_stdout),
+            )
+        except Exception as exc:  # pragma: no cover - failure surfaced below
+            errors.append(exc)
+
+    worker = threading.Thread(target=run_harness)
+    worker.start()
+
+    question_event = fake_stdout.wait_for_event("question_asked")
+    fake_stdin.push_line(
+        json.dumps({"answers": {"Which approach should I use?": "Option B"}}) + "\n"
+    )
+    worker.join(timeout=5)
+
+    assert errors == []
+    assert worker.is_alive() is False
+    assert result_holder["result"].final_text == "Using Option B"
+
+    reopened = context.open(locator={"id": result_holder["result"].session_id})
+    question_events = [event for event in reopened.events if event["type"] == "question_asked"]
+    assert question_events == [
+        {
+            "type": "question_asked",
+            "session_id": reopened.session_id,
+            "turn_id": question_event["turn_id"],
+            "questions": question_event["questions"],
+            "answers": {"Which approach should I use?": "Option B"},
+        }
+    ]

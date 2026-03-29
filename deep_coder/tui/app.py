@@ -1,3 +1,4 @@
+import json
 from rich.console import Group, RenderableType
 from rich.text import Text
 import signal
@@ -19,6 +20,7 @@ from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
     render_model_error_block,
+    render_question_asked_block,
     render_reasoning_block,
     render_skill_event_block,
     render_task_snapshot_block,
@@ -30,6 +32,7 @@ from deep_coder.tui.render import (
 from deep_coder.tui.screens.command_palette import CommandPalette
 from deep_coder.tui.screens.skill_list import SkillListScreen
 from deep_coder.tui.screens.session_switcher import SessionSwitcher
+from deep_coder.tui.widgets.question_widget import QuestionWidget
 
 
 class TimelineEvent(Message):
@@ -206,10 +209,12 @@ class DeepCodeApp(App):
         self._sigint_pending = False
         self._sigint_poll_timer = None
         self._previous_sigint_handler = None
+        self._pending_question_event = None
 
     def compose(self) -> ComposeResult:
         with TimelineScroll(id="timeline-scroll"):
             yield Static("", id="timeline")
+            yield Container(id="question-slot")
         with Container(id="bottom-pane"):
             yield StatusStrip(id="status-strip")
             yield CommandPalette()
@@ -369,6 +374,7 @@ class DeepCodeApp(App):
     def load_session(self, session_id: str) -> None:
         session = self.runtime["context"].open(locator={"id": session_id})
         self.session_id = session_id
+        self._clear_question_slot()
         self._timeline_blocks.clear()
         for event in session.events:
             self._append_event_block(event)
@@ -426,12 +432,29 @@ class DeepCodeApp(App):
     def emit(self, event: dict) -> None:
         self.post_message(TimelineEvent(event))
 
-    def on_timeline_event(self, message: TimelineEvent) -> None:
+    async def on_timeline_event(self, message: TimelineEvent) -> None:
         event = message.event
         self.session_id = event.get("session_id", self.session_id)
         event_type = event["type"]
         if event_type == "turn_started" and self._turn_state != "interrupting":
             self._turn_state = "running"
+        elif event_type == "question_asked":
+            follow_tail = self._timeline_is_at_end()
+            if event.get("answers"):
+                self._append_event_block(event)
+                self._refresh_timeline(follow_tail=follow_tail)
+                self._update_status_strip()
+                return
+            if self._turn_state != "interrupting":
+                self._turn_state = "waiting_for_user"
+            self._update_status_strip()
+            await self._show_question_slot(event)
+            if follow_tail and self.is_mounted:
+                self.query_one("#timeline-scroll", TimelineScroll).scroll_end(
+                    animate=False,
+                    x_axis=False,
+                )
+            return
         elif event_type == "tool_called" and self._turn_state != "interrupting":
             self._turn_state = f"tool:{event['name']}"
         elif event_type == "context_compacting" and self._turn_state != "interrupting":
@@ -440,6 +463,7 @@ class DeepCodeApp(App):
             self._turn_state = "running"
         elif event_type in {"turn_finished", "turn_interrupted", "turn_failed"}:
             self._turn_state = "idle"
+            self._clear_question_slot()
 
         follow_tail = self._timeline_is_at_end()
         self._append_event_block(event)
@@ -470,6 +494,8 @@ class DeepCodeApp(App):
             block = render_context_compaction_block(event)
         elif event_type in {"skill_activated", "skill_dropped", "skill_missing"}:
             block = render_skill_event_block(event)
+        elif event_type == "question_asked":
+            block = render_question_asked_block(event)
         else:
             return
         self._timeline_blocks.append(block)
@@ -488,6 +514,7 @@ class DeepCodeApp(App):
         return self.query_one("#timeline-scroll", TimelineScroll).is_vertical_scroll_end
 
     def _update_status_strip(self) -> None:
+        self._sync_composer_state()
         self.query_one("#status-strip", StatusStrip).set_state(
             project_name=self.project.name,
             session_id=self.session_id,
@@ -495,6 +522,12 @@ class DeepCodeApp(App):
             turn_state=self._turn_state,
             command_feedback=self._command_feedback,
         )
+
+    def _sync_composer_state(self) -> None:
+        composer = self.query_one("#composer", Composer)
+        composer.disabled = self._turn_state == "waiting_for_user"
+        if composer.disabled:
+            self.query_one("#command-palette", CommandPalette).set_matches([])
 
     def _run_command(self, command_text: str) -> None:
         result = self._command_registry.execute(
@@ -550,6 +583,7 @@ class DeepCodeApp(App):
         self.session_id = None
         self._timeline_blocks.clear()
         self._turn_state = "idle"
+        self._clear_question_slot()
         self._refresh_timeline()
         self._update_status_strip()
 
@@ -640,3 +674,36 @@ class DeepCodeApp(App):
             if index < len(self._timeline_blocks) - 1:
                 blocks.append(Text(""))
         return Group(*blocks)
+
+    async def _show_question_slot(self, event: dict) -> None:
+        self._pending_question_event = event
+        slot = self.query_one("#question-slot", Container)
+        await slot.remove_children()
+        await slot.mount(QuestionWidget(event))
+
+    def _clear_question_slot(self) -> None:
+        self._pending_question_event = None
+        self.query_one("#question-slot", Container).remove_children()
+
+    def on_question_widget_answered(self, message: QuestionWidget.Answered) -> None:
+        message.stop()
+        if self._pending_question_event is None:
+            return
+        if self._active_turn is not None and hasattr(self._active_turn, "write_answer"):
+            self._active_turn.write_answer(json.dumps({"answers": message.answers}))
+
+        follow_tail = self._timeline_is_at_end()
+        self._append_event_block(
+            {
+                "type": "question_asked",
+                "session_id": self._pending_question_event.get("session_id", self.session_id),
+                "turn_id": self._pending_question_event.get("turn_id", ""),
+                "questions": self._pending_question_event["questions"],
+                "answers": message.answers,
+            }
+        )
+        self._turn_state = "running"
+        self._clear_question_slot()
+        self._refresh_timeline(follow_tail=follow_tail)
+        self._update_status_strip()
+        self.query_one("#composer", Composer).focus()

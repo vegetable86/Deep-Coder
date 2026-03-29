@@ -17,6 +17,7 @@ def test_registry_returns_builtin_tool_schemas(tmp_path, monkeypatch):
         "write_file",
         "edit_file",
         "think",
+        "ask_user",
         "task_create",
         "task_update",
         "task_list",

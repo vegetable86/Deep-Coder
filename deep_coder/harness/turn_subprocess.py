@@ -32,6 +32,15 @@ class TurnSubprocess:
     def wait(self, timeout: float | None = None) -> int:
         return self._process.wait(timeout=timeout)
 
+    def write_answer(self, answer_json: str) -> None:
+        stdin = self._process.stdin
+        if stdin is None or stdin.closed:
+            raise RuntimeError("turn subprocess is not accepting input")
+        stdin.write(answer_json)
+        if not answer_json.endswith("\n"):
+            stdin.write("\n")
+        stdin.flush()
+
     def interrupt(self, *, grace_period: float = 0.2) -> None:
         if not self._process_group_exists() and self.poll() is not None:
             return
@@ -112,6 +121,6 @@ def start_turn_subprocess(
         start_new_session=True,
     )
     assert process.stdin is not None
-    process.stdin.write(json.dumps(request))
-    process.stdin.close()
+    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.flush()
     return TurnSubprocess(process)

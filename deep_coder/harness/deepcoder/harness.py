@@ -34,6 +34,7 @@ class DeepCoderHarness(HarnessBase):
         tool_results = []
         current_input = user_input
         turn_id = uuid.uuid4().hex[:12]
+        session.current_turn_id = turn_id
 
         self._publish(
             session,

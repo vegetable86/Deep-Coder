@@ -1,7 +1,11 @@
 import asyncio
+import json
 import signal
 
+from textual.css.query import NoMatches
+
 from deep_coder.tui.app import DeepCodeApp
+from deep_coder.tui.widgets.question_widget import QuestionWidget
 from tests.tui.conftest import render_widget_text
 
 
@@ -245,6 +249,102 @@ def test_live_skill_events_render_inline_in_timeline(fake_runtime, fake_project)
             assert "Skill active: python-tests" in timeline_text
             assert "Skill removed: python-tests" in timeline_text
             assert "Skill missing: python-tests" in timeline_text
+
+    asyncio.run(run())
+
+
+def test_question_asked_event_locks_composer_and_submits_answer(
+    fake_runtime,
+    fake_project,
+):
+    class RecordingTurn:
+        def __init__(self):
+            self.answers = []
+
+        def write_answer(self, answer_json: str) -> None:
+            self.answers.append(json.loads(answer_json))
+
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        app._active_turn = RecordingTurn()
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "question_asked",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "questions": [
+                        {
+                            "question": "Which approach should I use?",
+                            "options": [
+                                {
+                                    "label": "Option A",
+                                    "description": "Fast but less accurate",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+            composer = app.query_one("#composer")
+            widget = app.query_one(QuestionWidget)
+            assert composer.disabled is True
+
+            other_input = None
+            for _ in range(5):
+                try:
+                    other_input = widget.query_one("#question-other-0")
+                    break
+                except NoMatches:
+                    await asyncio.sleep(0)
+            assert other_input is not None
+
+            widget.select_option(0, "Other")
+            other_input.load_text("My custom answer")
+            widget.submit_answers()
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+            assert app._active_turn.answers == [
+                {"answers": {"Which approach should I use?": "My custom answer"}}
+            ]
+            assert composer.disabled is False
+            assert "My custom answer" in render_widget_text(app.query_one("#timeline"))
+
+    asyncio.run(run())
+
+
+def test_session_replay_renders_question_asked_summary(fake_runtime, fake_project):
+    async def run():
+        session = fake_runtime["context"].open({"id": "session-a"})
+        session.events = [
+            {
+                "type": "question_asked",
+                "questions": [
+                    {
+                        "question": "Which approach should I use?",
+                        "options": [
+                            {
+                                "label": "Option A",
+                                "description": "Fast but less accurate",
+                            }
+                        ],
+                    }
+                ],
+                "answers": {"Which approach should I use?": "Option A"},
+            }
+        ]
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.load_session("session-a")
+            await asyncio.sleep(0)
+
+            timeline_text = render_widget_text(app.query_one("#timeline"))
+            assert "Which approach should I use?" in timeline_text
+            assert "Option A" in timeline_text
 
     asyncio.run(run())
 

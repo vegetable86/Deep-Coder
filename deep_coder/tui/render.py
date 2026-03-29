@@ -147,6 +147,34 @@ def render_skill_event_block(event: dict) -> RenderableType:
     )
 
 
+def render_question_asked_block(event: dict) -> RenderableType:
+    answers = event.get("answers", {})
+    lines = []
+    for question in event.get("questions", []):
+        question_text = question["question"]
+        lines.append(question_text)
+        answer = answers.get(question_text)
+        if answer:
+            lines.append(f"Answer: {answer}")
+        else:
+            lines.append("Awaiting user response")
+            for option in question.get("options", []):
+                description = option.get("description", "")
+                if description:
+                    lines.append(f"- {option['label']}: {description}")
+                else:
+                    lines.append(f"- {option['label']}")
+        lines.append("")
+    if lines and not lines[-1]:
+        lines.pop()
+    return Panel(
+        Text("\n".join(lines)),
+        border_style="cyan",
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def render_diff_block(path: str, diff_text: str) -> Text:
     block = Text(f"{path}\n", style="bold")
     old_line = None

@@ -1,6 +1,7 @@
 import difflib
 from pathlib import Path
 
+from deep_coder.tools.ask_user.tool import AskUserTool
 from deep_coder.tools.bash.tool import BashTool
 from deep_coder.tools.edit_file.tool import EditFileTool
 from deep_coder.tools.history_load.tool import HistoryLoadTool
@@ -33,6 +34,7 @@ class ToolRegistry:
                 WriteFileTool(config=config, workdir=workdir),
                 EditFileTool(config=config, workdir=workdir),
                 ThinkTool(config=config, workdir=workdir),
+                AskUserTool(config=config, workdir=workdir),
                 TaskCreateTool(config=config, workdir=workdir),
                 TaskUpdateTool(config=config, workdir=workdir),
                 TaskListTool(config=config, workdir=workdir),

@@ -3,6 +3,7 @@ import shlex
 import signal
 import sys
 import time
+from io import StringIO
 from types import SimpleNamespace
 
 from deep_coder.context.manager import ContextManager
@@ -11,7 +12,7 @@ from deep_coder.context.strategies.simple_history.strategy import (
     SimpleHistoryContextStrategy,
 )
 from deep_coder.harness.deepcoder.harness import DeepCoderHarness
-from deep_coder.harness.turn_subprocess import start_turn_subprocess
+from deep_coder.harness.turn_subprocess import TurnSubprocess, start_turn_subprocess
 from deep_coder.projects.registry import ProjectRecord
 from deep_coder.prompts.deepcoder.prompt import DeepCoderPrompt
 from deep_coder.tools.bash.tool import BashTool
@@ -236,6 +237,34 @@ def test_turn_subprocess_interrupt_stops_long_running_bash_tool(tmp_path):
     finally:
         turn.close()
         _kill_pid_from_file(project.path / _IGNORE_TERM_PID_FILE)
+
+
+def test_turn_subprocess_write_answer_writes_one_json_line_and_flushes():
+    class RecordingStdin(StringIO):
+        def __init__(self):
+            super().__init__()
+            self.flush_calls = 0
+
+        def flush(self):
+            self.flush_calls += 1
+
+    stdin = RecordingStdin()
+    process = SimpleNamespace(
+        pid=12345,
+        stdin=stdin,
+        stdout=None,
+        stderr=None,
+        poll=lambda: 0,
+        wait=lambda timeout=None: 0,
+    )
+    turn = TurnSubprocess(process)
+
+    turn.write_answer('{"answers":{"Which approach should I use?":"Option A"}}')
+
+    assert stdin.getvalue() == (
+        '{"answers":{"Which approach should I use?":"Option A"}}\n'
+    )
+    assert stdin.flush_calls == 1
 
 
 def _collect_events(turn) -> list[dict]:

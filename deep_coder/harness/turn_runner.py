@@ -18,7 +18,7 @@ class JsonLineEventSink:
 
 def main() -> int:
     try:
-        request = json.loads(sys.stdin.read() or "{}")
+        request = json.loads(sys.stdin.readline() or "{}")
         run_turn_request(request, stream=sys.stdout)
         return 0
     except Exception as exc:  # pragma: no cover - exercised via subprocess tests

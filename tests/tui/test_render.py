@@ -2,6 +2,7 @@ from deep_coder.tui.render import (
     render_diff_block,
     render_message_block,
     render_model_error_block,
+    render_question_asked_block,
     render_reasoning_block,
     render_task_snapshot_block,
     render_turn_interrupted_block,
@@ -138,3 +139,25 @@ def test_render_model_error_block_shows_retryability():
     )
 
     assert "retryable" in render_plain_text(block).lower()
+
+
+def test_render_question_asked_block_shows_answers():
+    block = render_question_asked_block(
+        {
+            "questions": [
+                {
+                    "question": "Which approach should I use?",
+                    "options": [
+                        {"label": "Option A", "description": "Fast but less accurate"},
+                        {"label": "Option B", "description": "Slower but more accurate"},
+                    ],
+                }
+            ],
+            "answers": {"Which approach should I use?": "Option B"},
+        }
+    )
+
+    text = render_plain_text(block)
+
+    assert "Which approach should I use?" in text
+    assert "Option B" in text

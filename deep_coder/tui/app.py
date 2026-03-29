@@ -4,7 +4,7 @@ from rich.text import Text
 import signal
 import threading
 from textual.actions import SkipAction
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, ScreenStackError
 from textual.binding import Binding
 from textual.containers import Container, VerticalScroll
 from textual.css.query import NoMatches
@@ -214,7 +214,7 @@ class DeepCodeApp(App):
     def compose(self) -> ComposeResult:
         with TimelineScroll(id="timeline-scroll"):
             yield Static("", id="timeline")
-            yield Container(id="question-slot")
+            yield QuestionWidget({"questions": []}, id="question-widget")
         with Container(id="bottom-pane"):
             yield StatusStrip(id="status-strip")
             yield CommandPalette()
@@ -223,6 +223,7 @@ class DeepCodeApp(App):
     def on_mount(self) -> None:
         self.query_one("#composer", Composer).focus()
         self.query_one("#command-palette", CommandPalette).display = False
+        self.query_one("#question-widget", QuestionWidget).display = False
         self._install_sigint_handler()
         self._sigint_poll_timer = self.set_interval(0.05, self._consume_pending_sigint)
         self._update_status_strip()
@@ -448,7 +449,8 @@ class DeepCodeApp(App):
             if self._turn_state != "interrupting":
                 self._turn_state = "waiting_for_user"
             self._update_status_strip()
-            await self._show_question_slot(event)
+            self._show_question_widget(event)
+            self.call_next(self._flush_question_widget_layout)
             if follow_tail and self.is_mounted:
                 self.query_one("#timeline-scroll", TimelineScroll).scroll_end(
                     animate=False,
@@ -675,15 +677,22 @@ class DeepCodeApp(App):
                 blocks.append(Text(""))
         return Group(*blocks)
 
-    async def _show_question_slot(self, event: dict) -> None:
+    def _show_question_widget(self, event: dict) -> None:
         self._pending_question_event = event
-        slot = self.query_one("#question-slot", Container)
-        await slot.remove_children()
-        await slot.mount(QuestionWidget(event))
+        widget = self.query_one("#question-widget", QuestionWidget)
+        widget.display = True
+        widget.load_event(event)
+
+    def _flush_question_widget_layout(self) -> None:
+        try:
+            self.screen._on_timer_update()
+        except ScreenStackError:
+            return
 
     def _clear_question_slot(self) -> None:
         self._pending_question_event = None
-        self.query_one("#question-slot", Container).remove_children()
+        widget = self.query_one("#question-widget", QuestionWidget)
+        widget.display = False
 
     def on_question_widget_answered(self, message: QuestionWidget.Answered) -> None:
         message.stop()

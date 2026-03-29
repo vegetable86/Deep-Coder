@@ -267,7 +267,7 @@ def test_question_asked_event_locks_composer_and_submits_answer(
     async def run():
         app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
         app._active_turn = RecordingTurn()
-        async with app.run_test(size=(120, 40)):
+        async with app.run_test(size=(120, 40)) as pilot:
             app.emit(
                 {
                     "type": "question_asked",
@@ -304,7 +304,7 @@ def test_question_asked_event_locks_composer_and_submits_answer(
 
             widget.select_option(0, "Other")
             other_input.load_text("My custom answer")
-            widget.submit_answers()
+            await pilot.press("escape")
             await asyncio.sleep(0)
             await asyncio.sleep(0)
 
@@ -313,6 +313,56 @@ def test_question_asked_event_locks_composer_and_submits_answer(
             ]
             assert composer.disabled is False
             assert "My custom answer" in render_widget_text(app.query_one("#timeline"))
+
+    asyncio.run(run())
+
+
+def test_question_asked_event_gives_live_choice_list_visible_space(
+    fake_runtime,
+    fake_project,
+):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app.emit(
+                {
+                    "type": "question_asked",
+                    "session_id": "session-a",
+                    "turn_id": "turn-live",
+                    "questions": [
+                        {
+                            "question": "Which approach should I use?",
+                            "options": [
+                                {
+                                    "label": "Option A",
+                                    "description": "Fast but less accurate",
+                                },
+                                {
+                                    "label": "Option B",
+                                    "description": "Slower but more accurate",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+            widget = app.query_one(QuestionWidget)
+            option_list = None
+            for _ in range(5):
+                try:
+                    option_list = widget.query_one("#question-options-0")
+                    break
+                except NoMatches:
+                    await asyncio.sleep(0)
+            assert option_list is not None
+
+            assert widget.size.width > 0
+            assert widget.size.height > 0
+            assert option_list.size.width > 0
+            assert option_list.size.height > 0
 
     asyncio.run(run())
 

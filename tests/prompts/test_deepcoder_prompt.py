@@ -84,8 +84,9 @@ def test_prompt_render_checks_context_sufficiency_before_history_lookup(
         ],
     )
 
-    assert "If the current message and visible context are enough" in text
-    assert "answer directly without retrieval" in text
+    assert "If the user references something from a prior session" in text
+    assert "call search_history before answering" in text
+    assert "do not guess" in text
 
 
 def test_prompt_render_searches_compact_history_before_loading_evidence(
@@ -103,10 +104,53 @@ def test_prompt_render_searches_compact_history_before_loading_evidence(
         ],
     )
 
-    assert "use search_history to search compact session history first" in text
+    assert "If the current task touches code or context you haven't seen in this turn" in text
+    assert "call search_history to check whether prior work is relevant" in text
+    assert "Only skip retrieval when the current message and visible context are fully sufficient" in text
     assert "Use concrete anchors such as files, functions, errors, decisions, constraints, or task subjects" in text
     assert "Use load_history_artifacts only when compact history is insufficient" in text
     assert "exact wording, tool arguments, outputs, diffs, or evidence matter" in text
+
+
+def test_prompt_render_includes_think_and_web_search_trigger_rules(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    config = RuntimeConfig.from_env(workdir=tmp_path, state_dir=tmp_path / ".deepcode")
+    prompt = DeepCoderPrompt(config=config)
+
+    text = prompt.render(
+        session_snapshot={"id": "session-1"},
+        tool_schemas=[
+            {"function": {"name": "think"}},
+            {"function": {"name": "web_search"}},
+        ],
+    )
+
+    assert "Before implementing any non-trivial feature, architectural change, or multi-step task, call think to plan your approach first." in text
+    assert "When debugging a complex issue with multiple possible causes, call think to reason through them before acting." in text
+    assert "When you need to evaluate trade-offs between approaches, call think before responding." in text
+    assert "When you encounter an unfamiliar library, API, error message, or technology, call web_search before guessing." in text
+    assert "When the user asks about something that may have changed since your training" in text
+    assert "When official documentation would resolve ambiguity faster than reasoning from memory, call web_search." in text
+
+
+def test_prompt_render_includes_proactive_clarification_triggers(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    config = RuntimeConfig.from_env(workdir=tmp_path, state_dir=tmp_path / ".deepcode")
+    prompt = DeepCoderPrompt(config=config)
+
+    text = prompt.render(
+        session_snapshot={"id": "session-1"},
+        tool_schemas=[{"function": {"name": "ask_user"}}],
+    )
+
+    assert "Be proactive only when the user asks you to do something." in text
+    assert "If the user's request requires choosing between approaches and the choice meaningfully affects the outcome, call ask_user before acting." in text
+    assert "If a task is ambiguous in a way that would cause you to make a significant assumption, call ask_user to resolve it first." in text
+    assert "Do not ask for clarification on trivial details" in text
 
 
 def test_prompt_render_uses_task_tools_only_for_multi_step_work(

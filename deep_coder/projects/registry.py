@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 import re
+import tomllib
 
 
 CONTEXT_SETTING_KEYS = (
@@ -72,38 +73,34 @@ class ProjectRegistry:
     def _load(self) -> dict:
         if not self.config_path.exists():
             return {"projects": []}
+        raw = tomllib.loads(self.config_path.read_text())
         data = {"projects": []}
-        current_project = None
-        default_model = None
-        context_settings = {}
-        project = None
 
-        for raw_line in self.config_path.read_text().splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line == "[[projects]]":
-                project = {}
-                data["projects"].append(project)
-                continue
-
-            key, _, raw_value = line.partition("=")
-            key = key.strip()
-            value = self._unescape(raw_value.strip().strip('"'))
-            if project is not None:
-                project[key] = value
-            elif key == "current_project":
-                current_project = value
-            elif key == "default_model":
-                default_model = value
-            elif key in CONTEXT_SETTING_KEYS:
-                context_settings[key] = int(value)
-
-        if current_project:
+        current_project = raw.get("current_project")
+        if isinstance(current_project, str):
             data["current_project"] = current_project
-        if default_model:
+        default_model = raw.get("default_model")
+        if isinstance(default_model, str):
             data["default_model"] = default_model
-        data.update(context_settings)
+        for key in CONTEXT_SETTING_KEYS:
+            value = raw.get(key)
+            if value is not None:
+                data[key] = int(value)
+
+        web_search = raw.get("web_search")
+        if isinstance(web_search, dict):
+            data["web_search"] = web_search
+
+        for project in raw.get("projects", []):
+            data["projects"].append(
+                {
+                    "path": str(project["path"]),
+                    "name": str(project["name"]),
+                    "key": str(project["key"]),
+                    "last_opened_at": str(project["last_opened_at"]),
+                }
+            )
+
         return data
 
     def _save(self, data: dict) -> None:
@@ -121,6 +118,10 @@ class ProjectRegistry:
             value = data.get(key)
             if value is not None:
                 lines.append(f"{key} = {int(value)}")
+
+        web_search = data.get("web_search")
+        if isinstance(web_search, dict) and web_search:
+            _append_table(lines, "web_search", web_search)
 
         for project in data.get("projects", []):
             lines.extend(
@@ -186,3 +187,27 @@ class ProjectRegistry:
     @staticmethod
     def _unescape(value: str) -> str:
         return value.replace('\\"', '"').replace("\\\\", "\\")
+
+
+def _append_table(lines: list[str], table_name: str, values: dict) -> None:
+    lines.extend(["", f"[{table_name}]"])
+    for key, value in values.items():
+        if isinstance(value, dict):
+            continue
+        lines.append(_format_toml_assignment(key, value))
+    for key, value in values.items():
+        if not isinstance(value, dict):
+            continue
+        lines.extend(["", f"[{table_name}.{key}]"])
+        for subkey, subvalue in value.items():
+            lines.append(_format_toml_assignment(subkey, subvalue))
+
+
+def _format_toml_assignment(key: str, value) -> str:
+    if isinstance(value, bool):
+        rendered = "true" if value else "false"
+    elif isinstance(value, int):
+        rendered = str(value)
+    else:
+        rendered = f'"{ProjectRegistry._escape(str(value))}"'
+    return f"{key} = {rendered}"

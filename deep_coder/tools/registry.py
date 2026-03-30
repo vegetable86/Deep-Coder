@@ -17,6 +17,7 @@ from deep_coder.tools.tasks.tool import (
     TaskUpdateTool,
 )
 from deep_coder.tools.think.tool import ThinkTool
+from deep_coder.tools.web_search.tool import WebSearchTool
 from deep_coder.tools.write_file.tool import WriteFileTool
 
 
@@ -27,24 +28,24 @@ class ToolRegistry:
 
     @classmethod
     def from_builtin(cls, config, workdir):
-        return cls(
-            [
-                BashTool(config=config, workdir=workdir),
-                ReadFileTool(config=config, workdir=workdir),
-                WriteFileTool(config=config, workdir=workdir),
-                EditFileTool(config=config, workdir=workdir),
-                ThinkTool(config=config, workdir=workdir),
-                AskUserTool(config=config, workdir=workdir),
-                TaskCreateTool(config=config, workdir=workdir),
-                TaskUpdateTool(config=config, workdir=workdir),
-                TaskListTool(config=config, workdir=workdir),
-                TaskGetTool(config=config, workdir=workdir),
-                HistorySearchTool(config=config, workdir=workdir),
-                HistoryLoadTool(config=config, workdir=workdir),
-                SkillLoadTool(config=config, workdir=workdir),
-            ],
-            workdir=workdir,
-        )
+        tools = [
+            BashTool(config=config, workdir=workdir),
+            ReadFileTool(config=config, workdir=workdir),
+            WriteFileTool(config=config, workdir=workdir),
+            EditFileTool(config=config, workdir=workdir),
+            ThinkTool(config=config, workdir=workdir),
+            AskUserTool(config=config, workdir=workdir),
+            TaskCreateTool(config=config, workdir=workdir),
+            TaskUpdateTool(config=config, workdir=workdir),
+            TaskListTool(config=config, workdir=workdir),
+            TaskGetTool(config=config, workdir=workdir),
+            HistorySearchTool(config=config, workdir=workdir),
+            HistoryLoadTool(config=config, workdir=workdir),
+            SkillLoadTool(config=config, workdir=workdir),
+        ]
+        if getattr(config, "web_search_provider", None) is not None:
+            tools.append(WebSearchTool(config=config, workdir=workdir))
+        return cls(tools, workdir=workdir)
 
     def schemas(self) -> list[dict]:
         return [tool.schema() for tool in self._tools.values()]

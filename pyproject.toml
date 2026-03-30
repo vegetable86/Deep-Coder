@@ -9,6 +9,8 @@ description = "Project-scoped coding TUI powered by DeepSeek."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "beautifulsoup4",
+    "httpx",
     "openai",
     "rich",
     "textual",

@@ -169,3 +169,21 @@ def test_registry_wraps_think_failures_as_tool_errors(tmp_path, monkeypatch):
 
     assert result.is_error is True
     assert result.output_text == "reasoner unavailable"
+
+
+def test_registry_registers_web_search_when_provider_is_configured(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    config = RuntimeConfig.from_env(workdir=tmp_path)
+    config.web_search_provider = type(
+        "Provider",
+        (),
+        {"search": lambda self, query, num_results: []},
+    )()
+
+    registry = ToolRegistry.from_builtin(config=config, workdir=tmp_path)
+
+    names = [schema["function"]["name"] for schema in registry.schemas()]
+
+    assert "web_search" in names

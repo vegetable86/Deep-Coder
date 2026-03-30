@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import tomllib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from deep_coder.tools.web_search.providers.base import SearchProvider
 
 
 DEFAULT_CONTEXT_SETTINGS = {
@@ -29,6 +34,8 @@ class RuntimeConfig:
     context_compact_threshold: int
     context_summary_max_tokens: int
     context_reasoning_max_chars: int
+    web_search_settings: dict | None = None
+    web_search_provider: "SearchProvider | None" = None
 
     @property
     def skills_dir(self) -> Path:
@@ -44,8 +51,8 @@ class RuntimeConfig:
         context_settings: dict | None = None,
     ):
         workdir = (workdir or Path.cwd()).resolve()
-        state_dir = state_dir or (Path.home() / ".deepcode")
-        global_state_dir = (global_state_dir or state_dir).resolve()
+        state_dir = Path(state_dir or (Path.home() / ".deepcode")).resolve()
+        global_state_dir = Path(global_state_dir or state_dir).resolve()
         context_values = _resolve_context_settings(context_settings)
         return cls(
             model_provider="deepseek",
@@ -63,6 +70,7 @@ class RuntimeConfig:
             context_compact_threshold=context_values["context_compact_threshold"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
             context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
+            web_search_settings=load_web_search_settings(global_state_dir),
         )
 
     @classmethod
@@ -91,6 +99,7 @@ class RuntimeConfig:
             context_compact_threshold=context_values["context_compact_threshold"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
             context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
+            web_search_settings=load_web_search_settings(global_state_dir),
         )
 
 
@@ -102,3 +111,14 @@ def _resolve_context_settings(context_settings: dict | None) -> dict[str, int]:
         if key in context_settings and context_settings[key] is not None:
             values[key] = int(context_settings[key])
     return values
+
+
+def load_web_search_settings(global_state_dir: Path) -> dict | None:
+    config_path = Path(global_state_dir) / "config.toml"
+    if not config_path.exists():
+        return None
+    data = tomllib.loads(config_path.read_text())
+    settings = data.get("web_search")
+    if not isinstance(settings, dict) or not settings:
+        return None
+    return settings

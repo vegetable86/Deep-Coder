@@ -12,6 +12,7 @@ from deep_coder.models.deepseek.model import DeepSeekModel
 from deep_coder.prompts.deepcoder.prompt import DeepCoderPrompt
 from deep_coder.projects.registry import ProjectRecord
 from deep_coder.tools.registry import ToolRegistry
+from deep_coder.tools.web_search.providers.factory import build_provider
 
 
 def build_runtime(
@@ -38,6 +39,7 @@ def build_runtime(
             model_name=model_name,
             context_settings=context_settings,
         )
+    config.web_search_provider = build_provider(config)
     model = DeepSeekModel(config=config)
     tools = ToolRegistry.from_builtin(config=config, workdir=config.workdir)
     prompt = DeepCoderPrompt(config=config)

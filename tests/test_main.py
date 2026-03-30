@@ -48,3 +48,30 @@ def test_build_runtime_uses_explicit_model_name(monkeypatch, tmp_path):
     runtime = build_runtime(project=project, model_name="deepseek-reasoner")
 
     assert runtime["config"].model_name == "deepseek-reasoner"
+
+
+def test_build_runtime_builds_web_search_provider_from_global_config(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    state_dir = tmp_path / ".deepcode"
+    state_dir.mkdir()
+    (state_dir / "config.toml").write_text(
+        "\n".join(
+            [
+                '[web_search]',
+                'provider = "serper"',
+                "",
+                "[web_search.serper]",
+                'api_key = "serper-key"',
+                "",
+            ]
+        )
+    )
+
+    runtime = build_runtime(workdir=tmp_path, state_dir=state_dir)
+
+    assert runtime["config"].web_search_provider is not None
+    assert runtime["config"].web_search_provider.__class__.__name__ == "SerperProvider"
+    names = [schema["function"]["name"] for schema in runtime["tools"].schemas()]
+    assert "web_search" in names

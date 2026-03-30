@@ -111,12 +111,7 @@ class TimelineScroll(VerticalScroll):
 
 
 class StatusStrip(Static):
-    _PULSE_STYLES = (
-        "black on rgb(88,124,144)",
-        "black on rgb(102,148,170)",
-        "black on rgb(122,178,204)",
-        "black on rgb(102,148,170)",
-    )
+    _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -125,7 +120,7 @@ class StatusStrip(Static):
         self._model_name = ""
         self._turn_state = "idle"
         self._command_feedback = ""
-        self._pulse_index = 0
+        self._spinner_index = 0
         self._pulse_timer = None
 
     def set_state(
@@ -143,7 +138,7 @@ class StatusStrip(Static):
         self._turn_state = turn_state
         self._command_feedback = command_feedback
         self._sync_busy_state()
-        self.update(self._build_text())
+        self.refresh()
 
     def _sync_busy_state(self) -> None:
         is_busy = (
@@ -153,18 +148,21 @@ class StatusStrip(Static):
         self.set_class(is_busy, "busy")
         if is_busy:
             if self._pulse_timer is None:
-                self._pulse_timer = self.set_interval(0.6, self._advance_pulse)
+                self._pulse_timer = self.set_interval(0.08, self._advance_spinner)
         else:
-            self._pulse_index = 0
+            self._spinner_index = 0
             if self._pulse_timer is not None:
                 self._pulse_timer.stop()
                 self._pulse_timer = None
 
-    def _advance_pulse(self) -> None:
+    def _advance_spinner(self) -> None:
         if not self.has_class("busy"):
             return
-        self._pulse_index = (self._pulse_index + 1) % len(self._PULSE_STYLES)
-        self.update(self._build_text())
+        self._spinner_index = (self._spinner_index + 1) % len(self._SPINNER_FRAMES)
+        self.refresh()
+
+    def render(self) -> Text:
+        return self._build_text()
 
     def _build_text(self) -> Text:
         text = Text()
@@ -174,15 +172,17 @@ class StatusStrip(Static):
         text.append(" | ", style="dim")
         text.append(self._model_name, style="magenta")
         text.append(" | ", style="dim")
-        text.append(self._turn_state, style=self._turn_state_style())
+        turn_state = self._turn_state
+        if self.has_class("busy"):
+            frame = self._SPINNER_FRAMES[self._spinner_index]
+            turn_state = f"{frame} {turn_state}"
+        text.append(turn_state, style=self._turn_state_style())
         if self._command_feedback:
             text.append(" | ", style="dim")
             text.append(self._command_feedback, style="yellow")
         return text
 
     def _turn_state_style(self) -> str:
-        if self.has_class("busy"):
-            return self._PULSE_STYLES[self._pulse_index]
         return "bold white on rgb(58,58,58)"
 
 

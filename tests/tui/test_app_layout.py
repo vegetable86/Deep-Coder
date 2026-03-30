@@ -1,6 +1,6 @@
 import asyncio
 
-from deep_coder.tui.app import DeepCodeApp
+from deep_coder.tui.app import DeepCodeApp, StatusStrip
 from tests.tui.conftest import render_widget_text
 
 
@@ -316,6 +316,49 @@ def test_status_strip_animates_only_while_busy(fake_runtime, fake_project):
 
             assert status.has_class("busy") is False
             assert status._pulse_timer is None
+
+    asyncio.run(run())
+
+
+def test_status_strip_shows_spinner_frame_while_busy(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app._turn_state = "running"
+            app._update_status_strip()
+
+            status = app.query_one("#status-strip", StatusStrip)
+            assert status.has_class("busy") is True
+            assert f"{StatusStrip._SPINNER_FRAMES[0]} running" in render_widget_text(status)
+
+            status._advance_spinner()
+
+            assert f"{StatusStrip._SPINNER_FRAMES[1]} running" in render_widget_text(status)
+
+    asyncio.run(run())
+
+
+def test_status_strip_resets_spinner_when_idle(fake_runtime, fake_project):
+    async def run():
+        app = DeepCodeApp(runtime=fake_runtime, project=fake_project)
+        async with app.run_test(size=(120, 40)):
+            app._turn_state = "tool:think"
+            app._update_status_strip()
+
+            status = app.query_one("#status-strip", StatusStrip)
+            status._advance_spinner()
+            assert status._spinner_index == 1
+
+            app._turn_state = "idle"
+            app._update_status_strip()
+
+            status_text = render_widget_text(status)
+            assert status.has_class("busy") is False
+            assert status._pulse_timer is None
+            assert status._spinner_index == 0
+            assert "idle" in status_text
+            assert StatusStrip._SPINNER_FRAMES[0] not in status_text
+            assert StatusStrip._SPINNER_FRAMES[1] not in status_text
 
     asyncio.run(run())
 

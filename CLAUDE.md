@@ -37,7 +37,7 @@ No linting tools are configured.
 | `deep_coder/config.py` | `RuntimeConfig` dataclass |
 | `deep_coder/harness/deepcoder/harness.py` | Main turn loop orchestration |
 | `deep_coder/models/deepseek/model.py` | DeepSeek API client (OpenAI SDK wrapper) |
-| `deep_coder/tools/` | `ToolRegistry` + 13 built-in tools (incl. `ask_user`) |
+| `deep_coder/tools/` | `ToolRegistry` + built-in tools (incl. `ask_user`, `web_search`) |
 | `deep_coder/prompts/deepcoder/prompt.py` | System prompt renderer |
 | `deep_coder/context/` | Session persistence + message assembly |
 | `deep_coder/projects/registry.py` | Workspace → project mapping (`~/.deepcode/config.toml`) |
@@ -77,7 +77,7 @@ All major subsystems have base classes in `*/base.py`. New implementations can b
 
 - `HarnessBase` → `DeepCoderHarness`
 - `ModelBase` → `DeepSeekModel`
-- `ToolBase` → 13 built-in tools (ask_user uses stdin/stdout pipe for blocking user interaction)
+- `ToolBase` → built-in tools (ask_user uses stdin/stdout pipe for blocking user interaction; web_search is conditionally registered based on config)
 - `PromptBase` → `DeepCoderPrompt`
 - `SessionStoreBase` → `FileSystemSessionStore`
 - `ContextStrategyBase` → `LayeredHistoryContextStrategy`
@@ -122,6 +122,35 @@ Slash commands: `/history`, `/session`, `/new`, `/model`, `/exit`.
 - `TurnSubprocess.write_answer(json_str)` sends the answer back; stdin stays open for the turn lifetime
 - TUI renders `QuestionWidget` (in `deep_coder/tui/widgets/question_widget.py`) inline in the timeline
 - Session replay renders a static summary via `render_question_asked_block()` in `render.py`
+
+### web_search Tool
+
+`deep_coder/tools/web_search/tool.py` — model calls this to search the web via a configured third-party provider.
+
+- Schema: `{ "query": str, "num_results": int (default 5), "fetch_content": bool (default false) }`
+- Returns a JSON array of `{ title, url, snippet, content? }` objects as `output_text`
+- If `fetch_content=true`, fetches each result URL with `httpx`, strips HTML tags/scripts/styles via `BeautifulSoup`, returns cleaned plain text in `content`; fetch failures set `content` to `"fetch failed: <reason>"`
+- Search API failures return `is_error=True` with `output_text = "web_search failed: <reason>"`
+- **Conditionally registered** — only added to `ToolRegistry` if `[web_search]` section exists in `~/.deepcode/config.toml`
+- Provider is resolved at startup via `build_provider(config)` in `main.py` and stored in `RuntimeConfig.web_search_provider`
+
+**Supported providers** (set `provider` key under `[web_search]` in config):
+
+| Provider key | Class | Required config fields |
+|---|---|---|
+| `"google"` | `GoogleSearchProvider` | `api_key`, `cx` |
+| `"serper"` | `SerperProvider` | `api_key` |
+| `"brave"` | `BraveSearchProvider` | `api_key` |
+
+**Config example (`~/.deepcode/config.toml`):**
+
+```toml
+[web_search]
+provider = "serper"
+
+[web_search.serper]
+api_key = "your-key"
+```
 
 ## Extending the Runtime
 

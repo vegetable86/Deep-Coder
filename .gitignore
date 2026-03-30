@@ -17,3 +17,4 @@ Thumbs.db
 .deep/
 deepseek-api/
 agentLoop.py
+.superpowers/

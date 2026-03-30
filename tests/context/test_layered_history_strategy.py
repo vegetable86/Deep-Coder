@@ -28,7 +28,7 @@ class FakeSummarizer:
 def _config(**overrides):
     values = {
         "context_recent_turns": 2,
-        "context_compact_threshold": 4500,
+        "context_max_tokens": 10000,
         "context_summary_max_tokens": 1200,
         "context_reasoning_max_chars": 4000,
     }
@@ -90,7 +90,43 @@ def test_layered_strategy_builds_prompt_from_summary_plus_recent_turns(tmp_path)
     assert messages[-1] == {"role": "user", "content": "next step"}
 
 
-def test_layered_strategy_compacts_old_spans_when_budget_is_exceeded(tmp_path):
+def test_layered_strategy_does_not_compact_below_ninety_percent_of_context_window(
+    tmp_path,
+):
+    session = Session(session_id="s1", root=tmp_path)
+    session.journal = [
+        make_journal_entry(
+            event_id="evt-1",
+            turn_id="turn-1",
+            kind="user_message",
+            role="user",
+        ),
+        make_journal_entry(
+            event_id="evt-2",
+            turn_id="turn-2",
+            kind="assistant_message",
+            role="assistant",
+        ),
+        make_journal_entry(
+            event_id="evt-3",
+            turn_id="turn-3",
+            kind="user_message",
+            role="user",
+        ),
+    ]
+    strategy = LayeredHistoryContextStrategy(
+        config=_config(context_recent_turns=1),
+        summarizer=FakeSummarizer(),
+    )
+
+    should_compact = strategy.should_compact(session, usage={"prompt_tokens": 8999})
+
+    assert should_compact is False
+
+
+def test_layered_strategy_compacts_old_spans_at_ninety_percent_of_context_window(
+    tmp_path,
+):
     session = Session(session_id="s1", root=tmp_path)
     session.journal = [
         make_journal_entry(
@@ -148,6 +184,127 @@ def test_layered_strategy_compacts_old_spans_when_budget_is_exceeded(tmp_path):
             "session_id": "s1",
             "event_ids": ["evt-1", "evt-2"],
         }
+    ]
+
+
+def test_layered_strategy_skips_compaction_without_summarizable_entries(tmp_path):
+    session = Session(session_id="s1", root=tmp_path)
+    session.journal = [
+        make_journal_entry(
+            event_id="evt-1",
+            turn_id="turn-1",
+            kind="user_message",
+            role="user",
+        ),
+        make_journal_entry(
+            event_id="evt-2",
+            turn_id="turn-2",
+            kind="assistant_message",
+            role="assistant",
+        ),
+    ]
+    strategy = LayeredHistoryContextStrategy(
+        config=_config(context_recent_turns=2),
+        summarizer=FakeSummarizer(),
+    )
+
+    should_compact = strategy.should_compact(session, usage={"prompt_tokens": 9000})
+
+    assert should_compact is False
+
+
+def test_layered_strategy_only_compacts_unsummarized_entries_on_second_pass(tmp_path):
+    session = Session(session_id="s1", root=tmp_path)
+    session.journal = [
+        make_journal_entry(
+            event_id="evt-1",
+            turn_id="turn-1",
+            kind="user_message",
+            role="user",
+        ),
+        make_journal_entry(
+            event_id="evt-2",
+            turn_id="turn-2",
+            kind="assistant_message",
+            role="assistant",
+        ),
+        make_journal_entry(
+            event_id="evt-3",
+            turn_id="turn-3",
+            kind="user_message",
+            role="user",
+        ),
+        make_journal_entry(
+            event_id="evt-4",
+            turn_id="turn-4",
+            kind="assistant_message",
+            role="assistant",
+        ),
+        make_journal_entry(
+            event_id="evt-5",
+            turn_id="turn-5",
+            kind="user_message",
+            role="user",
+        ),
+    ]
+    session.evidence = [
+        make_evidence_record(
+            evidence_id="evd-1",
+            event_id="evt-1",
+            role="user",
+            content="first",
+        ),
+        make_evidence_record(
+            evidence_id="evd-2",
+            event_id="evt-2",
+            role="assistant",
+            content="second",
+        ),
+        make_evidence_record(
+            evidence_id="evd-3",
+            event_id="evt-3",
+            role="user",
+            content="third",
+        ),
+        make_evidence_record(
+            evidence_id="evd-4",
+            event_id="evt-4",
+            role="assistant",
+            content="fourth",
+        ),
+        make_evidence_record(
+            evidence_id="evd-5",
+            event_id="evt-5",
+            role="user",
+            content="fifth",
+        ),
+    ]
+    summarizer = FakeSummarizer()
+    strategy = LayeredHistoryContextStrategy(
+        config=_config(context_recent_turns=1),
+        summarizer=summarizer,
+    )
+
+    first_compacted = strategy.maybe_compact(session, usage={"prompt_tokens": 9000})
+    session.journal.append(
+        make_journal_entry(
+            event_id="evt-6",
+            turn_id="turn-6",
+            kind="assistant_message",
+            role="assistant",
+        )
+    )
+    second_compacted = strategy.maybe_compact(session, usage={"prompt_tokens": 9000})
+
+    assert first_compacted is True
+    assert second_compacted is True
+    assert [summary["covered_event_ids"] for summary in session.summaries] == [
+        ["evt-1", "evt-2", "evt-3", "evt-4"],
+        ["evt-5"],
+    ]
+    assert summarizer.calls == [
+        {"session_id": "s1", "event_ids": ["evt-1", "evt-2", "evt-3", "evt-4"]},
+        {"session_id": "s1", "event_ids": ["evt-5"]},
     ]
 
 

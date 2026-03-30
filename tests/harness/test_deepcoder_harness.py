@@ -676,8 +676,9 @@ def test_harness_records_tool_calls_and_results_into_layered_context(tmp_path):
         strategy=LayeredHistoryContextStrategy(
             config=SimpleNamespace(
                 context_recent_turns=2,
-                context_compact_threshold=4500,
+                context_max_tokens=128000,
                 context_summary_max_tokens=1200,
+                context_reasoning_max_chars=4000,
             ),
             summarizer=FakeSummarizer(),
         ),
@@ -742,8 +743,9 @@ def test_harness_triggers_compaction_after_large_prompt_usage(tmp_path):
         strategy=LayeredHistoryContextStrategy(
             config=SimpleNamespace(
                 context_recent_turns=1,
-                context_compact_threshold=4500,
+                context_max_tokens=10000,
                 context_summary_max_tokens=1200,
+                context_reasoning_max_chars=4000,
             ),
             summarizer=FakeSummarizer(),
         ),

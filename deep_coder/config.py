@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 DEFAULT_CONTEXT_SETTINGS = {
     "context_recent_turns": 3,
     "context_working_token_budget": 6000,
-    "context_compact_threshold": 4500,
+    "context_max_tokens": 128000,
     "context_summary_max_tokens": 1200,
     "context_reasoning_max_chars": 4000,
 }
@@ -31,7 +31,7 @@ class RuntimeConfig:
     project_name: str
     context_recent_turns: int
     context_working_token_budget: int
-    context_compact_threshold: int
+    context_max_tokens: int
     context_summary_max_tokens: int
     context_reasoning_max_chars: int
     web_search_settings: dict | None = None
@@ -67,7 +67,7 @@ class RuntimeConfig:
             project_name=workdir.name or "workspace",
             context_recent_turns=context_values["context_recent_turns"],
             context_working_token_budget=context_values["context_working_token_budget"],
-            context_compact_threshold=context_values["context_compact_threshold"],
+            context_max_tokens=context_values["context_max_tokens"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
             context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
             web_search_settings=load_web_search_settings(global_state_dir),
@@ -96,7 +96,7 @@ class RuntimeConfig:
             project_name=project.name,
             context_recent_turns=context_values["context_recent_turns"],
             context_working_token_budget=context_values["context_working_token_budget"],
-            context_compact_threshold=context_values["context_compact_threshold"],
+            context_max_tokens=context_values["context_max_tokens"],
             context_summary_max_tokens=context_values["context_summary_max_tokens"],
             context_reasoning_max_chars=context_values["context_reasoning_max_chars"],
             web_search_settings=load_web_search_settings(global_state_dir),

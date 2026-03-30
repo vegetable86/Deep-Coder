@@ -9,7 +9,7 @@ import tomllib
 CONTEXT_SETTING_KEYS = (
     "context_recent_turns",
     "context_working_token_budget",
-    "context_compact_threshold",
+    "context_max_tokens",
     "context_summary_max_tokens",
 )
 

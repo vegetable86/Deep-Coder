@@ -33,7 +33,8 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
     def should_compact(self, session, usage: dict | None = None) -> bool:
         if not usage:
             return False
-        if usage.get("prompt_tokens", 0) <= self.config.context_compact_threshold:
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        if prompt_tokens < self.config.context_max_tokens * 0.9:
             return False
         return bool(self._summarizable_entries(session))
 

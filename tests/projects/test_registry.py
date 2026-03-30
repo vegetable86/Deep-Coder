@@ -51,7 +51,7 @@ def test_registry_round_trips_global_context_settings(tmp_path):
         {
             "context_recent_turns": 5,
             "context_working_token_budget": 7000,
-            "context_compact_threshold": 3200,
+            "context_max_tokens": 96000,
             "context_summary_max_tokens": 900,
         }
     )
@@ -61,7 +61,7 @@ def test_registry_round_trips_global_context_settings(tmp_path):
     assert reloaded.context_settings() == {
         "context_recent_turns": 5,
         "context_working_token_budget": 7000,
-        "context_compact_threshold": 3200,
+        "context_max_tokens": 96000,
         "context_summary_max_tokens": 900,
     }
 

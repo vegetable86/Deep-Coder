@@ -61,7 +61,7 @@ def test_cli_loads_global_context_settings_from_registry(monkeypatch, tmp_path):
         {
             "context_recent_turns": 5,
             "context_working_token_budget": 7000,
-            "context_compact_threshold": 3200,
+            "context_max_tokens": 96000,
             "context_summary_max_tokens": 900,
         }
     )
@@ -74,7 +74,7 @@ def test_cli_loads_global_context_settings_from_registry(monkeypatch, tmp_path):
     assert project.path == workspace.resolve()
     assert runtime["config"].context_recent_turns == 5
     assert runtime["config"].context_working_token_budget == 7000
-    assert runtime["config"].context_compact_threshold == 3200
+    assert runtime["config"].context_max_tokens == 96000
     assert runtime["config"].context_summary_max_tokens == 900
 
 

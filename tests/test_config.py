@@ -18,7 +18,8 @@ def test_runtime_config_exposes_layered_context_defaults(tmp_path, monkeypatch):
 
     assert config.context_recent_turns == 3
     assert config.context_working_token_budget > 0
-    assert config.context_compact_threshold < config.context_working_token_budget
+    assert config.context_max_tokens == 128000
+    assert config.context_max_tokens > config.context_working_token_budget
 
 
 def test_runtime_config_uses_global_skills_root(monkeypatch, tmp_path):

@@ -85,11 +85,11 @@ All major subsystems have base classes in `*/base.py`. New implementations can b
 ### Context Strategy
 
 `LayeredHistoryContextStrategy` assembles request messages from:
-1. A rolling summary of older turns (if compaction threshold exceeded)
+1. A rolling summary of older turns (if compaction has run)
 2. Recent N turns verbatim (default 3)
 3. Current user input
 
-Compaction uses the model itself (`ModelSummarizer`) to summarize older turns. Thresholds are configurable in `~/.deepcode/config.toml`.
+Compaction uses the model itself (`ModelSummarizer`) to summarize older turns. It triggers automatically mid-turn when `prompt_tokens >= context_max_tokens * 0.9` (default: 128000). Only unsummarized entries older than the recent-turns window are compacted — content is never summarized twice. Configurable via `context_max_tokens` in `~/.deepcode/config.toml`.
 
 ### Session Persistence
 
@@ -111,6 +111,8 @@ Each session lives at `~/.deepcode/projects/<project-key>/sessions/<session-id>/
 Key bindings: `Enter` submit, `Shift+Enter` newline, `/` command palette, `Ctrl+L` session switcher, `Ctrl+C` interrupt.
 
 Slash commands: `/history`, `/session`, `/new`, `/model`, `/exit`.
+
+**Status strip animation:** The `StatusStrip` shows a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) at 80ms intervals (~12fps) when the turn is active. The spinner frame is prepended to the turn state label (e.g. `⠹ tool:think`). When idle, the spinner resets and the timer stops. Implemented in `StatusStrip._advance_spinner` / `_SPINNER_FRAMES` in `deep_coder/tui/app.py`.
 
 ### ask_user Tool
 

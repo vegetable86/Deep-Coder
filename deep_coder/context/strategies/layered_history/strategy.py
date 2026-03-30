@@ -106,7 +106,7 @@ class LayeredHistoryContextStrategy(ContextStrategyBase):
             )
             if message is not None:
                 messages.append(message)
-        return messages
+        return _drop_trailing_unmatched_tool_calls(messages)
 
     def _summarizable_entries(self, session) -> list[dict]:
         turn_ids = [
@@ -192,3 +192,33 @@ def _truncate_reasoning(reasoning_content: str, max_chars: int) -> str:
     if max_chars <= 3:
         return reasoning_content[:max_chars]
     return f"{reasoning_content[: max_chars - 3]}..."
+
+
+def _drop_trailing_unmatched_tool_calls(messages: list[dict]) -> list[dict]:
+    """Remove trailing assistant tool_calls messages that have no following tool results.
+
+    This prevents a 400 error from the API when a turn was interrupted (e.g. Ctrl+C)
+    while a tool call was in flight and no tool result was ever recorded.
+    """
+    if not messages:
+        return messages
+    # Collect tool_call_ids that have a matching tool result in the list.
+    answered_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "tool" and msg.get("tool_call_id"):
+            answered_ids.add(msg["tool_call_id"])
+    # Walk backwards and drop assistant messages whose tool calls are all unanswered.
+    result = list(messages)
+    while result:
+        last = result[-1]
+        if last.get("role") != "assistant":
+            break
+        tool_calls = last.get("tool_calls")
+        if not tool_calls:
+            break
+        call_ids = {tc.get("id") for tc in tool_calls if tc.get("id")}
+        if call_ids and call_ids.isdisjoint(answered_ids):
+            result.pop()
+        else:
+            break
+    return result

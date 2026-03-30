@@ -361,7 +361,7 @@ class _QuestionOtherInput(TextArea):
         self._question_index = question_index
 
     async def _on_key(self, event: events.Key) -> None:
-        if event.key == "escape":
+        if event.key in ("escape", "enter"):
             event.stop()
             event.prevent_default()
             widget = self._question_widget()
